@@ -68,7 +68,21 @@ class AllureParfumPriceParserTest {
     }
 
     @Test
-    fun normalizePrice_handlesSpacesAndRub() {
-        assertEquals(3420.0, PriceNormalizer.normalize("3 420 руб.")!!, 0.01)
+    fun parseHtml_extractsPrice_fromAllureParfumLikeLayout() {
+        val html = """
+            <html><head>
+              <meta property="og:title" content="Creed Aventus"/>
+            </head><body>
+              <h1 class="product-item-detail-title">Creed Aventus</h1>
+              <div class="product-item-detail-price-current" id="price_value">560 руб.</div>
+            </body></html>
+        """.trimIndent()
+
+        val result = parser.parseHtml(html, "https://allureparfum.ru/katalog/muzhskaya-parfyumeriya/creed/aventus.html")
+
+        assertTrue(result is ParseResult.Success)
+        result as ParseResult.Success
+        assertEquals("Creed Aventus", result.title)
+        assertEquals(560.0, result.price, 0.01)
     }
 }

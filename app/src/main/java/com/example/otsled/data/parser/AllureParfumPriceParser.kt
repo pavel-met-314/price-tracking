@@ -74,12 +74,16 @@ class AllureParfumPriceParser(
 
         val selectors = listOf(
             ".product-item-detail-price-current",
+            ".product-item-detail-price-old + .product-item-detail-price-current",
             ".product-item-price-current",
             ".price_value",
             ".product-price",
             ".current-price",
             ".detail-price",
+            "#price_value",
+            ".bx_price",
             "[data-entity=price]",
+            ".catalog-block-price",
         )
         for (selector in selectors) {
             document.select(selector).forEach { element ->
