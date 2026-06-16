@@ -3,6 +3,7 @@ package com.example.otsled.di
 import android.content.Context
 import com.example.otsled.data.db.OtsledDatabase
 import com.example.otsled.data.parser.AllureParfumPriceParser
+import com.example.otsled.data.parser.PricePageLoader
 import com.example.otsled.data.parser.WebViewPriceFetcher
 import com.example.otsled.data.repository.ProductRepository
 import com.example.otsled.data.settings.SettingsRepository
@@ -29,6 +30,11 @@ class AppContainer(context: Context) {
 
     fun webViewPriceFetcher(): WebViewPriceFetcher = WebViewPriceFetcher(applicationContext)
 
+    fun pricePageLoader(): com.example.otsled.data.parser.PricePageLoader = PricePageLoader(
+        parser = priceParser(),
+        webViewFetcher = webViewPriceFetcher(),
+    )
+
     fun notificationManager(): PriceNotificationManager = PriceNotificationManager(applicationContext)
 
     fun priceCheckScheduler(): PriceCheckScheduler =
@@ -37,8 +43,7 @@ class AppContainer(context: Context) {
     fun priceCheckUseCase(): PriceCheckUseCase = PriceCheckUseCase(
         context = applicationContext,
         productRepository = productRepository,
-        priceParser = priceParser(),
+        pricePageLoader = pricePageLoader(),
         notificationManager = notificationManager(),
-        webViewPriceFetcher = webViewPriceFetcher(),
     )
 }

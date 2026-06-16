@@ -33,5 +33,8 @@
     <string name="price_changed_title">Цена изменилась</string>
     <string name="price_changed_message">%1$s: %2$s ₽ → %3$s ₽</string>
     <string name="target_reached_title">Цель достигнута</string>
-    <string name="target_reached_message">%1$s: %2$s ₽ (цель %3$s ₽)</string>
+    <string name="price_changed_variant_message">%1$s (%2$s): %3$s ₽ → %4$s ₽</string>
+    <string name="target_reached_variant_message">%1$s (%2$s): %3$s ₽ (цель %4$s ₽)</string>
+    <string name="volume_prices">Цены по объёмам</string>
+    <string name="price_from">от %1$s ₽</string>
 </resources>

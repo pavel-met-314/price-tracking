@@ -6,7 +6,7 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 @Entity(
-    tableName = "price_history",
+    tableName = "product_variants",
     foreignKeys = [
         ForeignKey(
             entity = TrackedProductEntity::class,
@@ -15,14 +15,20 @@ import androidx.room.PrimaryKey
             onDelete = ForeignKey.CASCADE,
         ),
     ],
-    indices = [Index("productId"), Index("variantId")],
+    indices = [
+        Index("productId"),
+        Index(value = ["productId", "variantKey"], unique = true),
+    ],
 )
-data class PriceHistoryEntryEntity(
+data class ProductVariantEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val productId: Long,
-    val variantId: Long? = null,
-    val volumeLabel: String? = null,
-    val price: Double,
-    val checkedAt: Long,
+    val variantKey: String,
+    val volume: String,
+    val label: String = "",
+    val article: String? = null,
+    val lastPrice: Double,
+    val oldPrice: Double? = null,
+    val lastCheckedAt: Long? = null,
 )

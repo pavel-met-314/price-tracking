@@ -113,8 +113,8 @@ private fun ProductCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            val priceText = product.lastPrice?.let {
-                stringResource(R.string.current_price, formatPrice(it))
+            val priceText = product.lastPrice?.let { minPrice ->
+                stringResource(R.string.price_from, formatPrice(minPrice))
             } ?: stringResource(R.string.no_price_yet)
             Text(
                 text = priceText,

@@ -98,11 +98,13 @@ fun AddProductScreen(
                     modifier = Modifier.padding(top = 16.dp),
                 )
             }
-            uiState.parsedPrice?.let { price ->
+            if (uiState.parsedVariants.isNotEmpty()) {
                 Text(
-                    text = stringResource(R.string.current_price, formatPrice(price)),
-                    modifier = Modifier.padding(top = 8.dp),
+                    text = stringResource(R.string.volume_prices),
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
                 )
+                ParsedVariantPricesList(variants = uiState.parsedVariants)
             }
 
             uiState.errorMessage?.let { error ->
@@ -155,8 +157,4 @@ private fun SettingSwitchRow(
         Text(text = label, modifier = Modifier.weight(1f))
         Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
-}
-
-private fun formatPrice(price: Double): String {
-    return if (price % 1.0 == 0.0) price.toLong().toString() else price.toString()
 }

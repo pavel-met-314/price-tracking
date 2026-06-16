@@ -2,8 +2,9 @@ package com.example.otsled.ui.products
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.otsled.data.parser.AllureParfumPriceParser
 import com.example.otsled.data.parser.ParseResult
+import com.example.otsled.data.parser.ParsedProductVariant
+import com.example.otsled.data.parser.ProductUrlNormalizer
 import com.example.otsled.di.AppContainer
 import com.example.otsled.domain.model.PriceHistoryEntry
 import com.example.otsled.domain.model.TrackedProduct
@@ -16,7 +17,7 @@ data class AddProductUiState(
     val url: String = "",
     val targetPrice: String = "",
     val title: String = "",
-    val parsedPrice: Double? = null,
+    val parsedVariants: List<ParsedProductVariant> = emptyList(),
     val notifyOnAnyChange: Boolean = true,
     val notifyOnTargetReached: Boolean = true,
     val isLoading: Boolean = false,
@@ -28,9 +29,7 @@ class AddProductViewModel(
     private val container: AppContainer,
 ) : ViewModel() {
     private val repository = container.productRepository
-    private val priceParser = container.priceParser()
-    private val webViewFetcher = container.webViewPriceFetcher()
-    private val priceCheckUseCase = container.priceCheckUseCase()
+    private val pricePageLoader = container.pricePageLoader()
 
     private val _uiState = MutableStateFlow(AddProductUiState())
     val uiState = _uiState.asStateFlow()
@@ -53,49 +52,38 @@ class AddProductViewModel(
 
     fun checkNow() {
         val url = _uiState.value.url.trim()
-        if (!priceParser.isSupportedUrl(url)) {
+        if (!ProductUrlNormalizer.isSupportedUrl(url)) {
             _uiState.update { it.copy(errorMessage = "Укажите ссылку на allureparfum.ru") }
             return
         }
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-            val result = parseUrl(url)
-            _uiState.update {
-                when (result) {
-                    is ParseResult.Success -> it.copy(
-                        isLoading = false,
-                        title = result.title,
-                        parsedPrice = result.price,
-                    )
-                    is ParseResult.Error -> it.copy(
-                        isLoading = false,
-                        errorMessage = result.message,
-                    )
-                }
-            }
+            applyParseResult(pricePageLoader.fetchAndParse(url))
         }
     }
 
     fun saveProduct() {
         val state = _uiState.value
         val url = state.url.trim()
-        if (!priceParser.isSupportedUrl(url)) {
+        if (!ProductUrlNormalizer.isSupportedUrl(url)) {
             _uiState.update { it.copy(errorMessage = "Укажите ссылку на allureparfum.ru") }
             return
         }
+
+        val normalizedUrl = ProductUrlNormalizer.normalize(url) ?: url
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
 
             var title = state.title
-            var price = state.parsedPrice
+            var variants = state.parsedVariants
 
-            if (title.isBlank() || price == null) {
-                when (val result = parseUrl(url)) {
+            if (title.isBlank() || variants.isEmpty()) {
+                when (val result = pricePageLoader.fetchAndParse(normalizedUrl)) {
                     is ParseResult.Success -> {
                         title = result.title
-                        price = result.price
+                        variants = result.variants
                     }
                     is ParseResult.Error -> {
                         _uiState.update { it.copy(isLoading = false, errorMessage = result.message) }
@@ -109,22 +97,26 @@ class AddProductViewModel(
                 .toDoubleOrNull()
 
             val now = System.currentTimeMillis()
+            val minPrice = variants.minOf { it.price }
             val product = TrackedProduct(
-                url = url,
+                url = normalizedUrl,
                 title = title,
                 targetPrice = targetPrice,
-                lastPrice = price,
+                lastPrice = minPrice,
                 lastCheckedAt = now,
                 notifyOnAnyChange = state.notifyOnAnyChange,
                 notifyOnTargetReached = state.notifyOnTargetReached,
             )
 
             val id = repository.insertProduct(product)
-            if (price != null) {
+            val savedVariants = repository.replaceVariants(id, variants, now)
+            savedVariants.forEach { variant ->
                 repository.insertHistory(
                     PriceHistoryEntry(
                         productId = id,
-                        price = price,
+                        variantId = variant.id,
+                        volumeLabel = variant.displayName(),
+                        price = variant.lastPrice,
                         checkedAt = now,
                     ),
                 )
@@ -134,16 +126,19 @@ class AddProductViewModel(
         }
     }
 
-    private suspend fun parseUrl(url: String): ParseResult {
-        var result = priceParser.fetchAndParse(url)
-        if (result is ParseResult.Error && result.message.contains("WebView")) {
-            val html = webViewFetcher.fetchHtml(url)
-            result = if (html.isNullOrBlank()) {
-                ParseResult.Error("Не удалось загрузить страницу")
-            } else {
-                priceParser.parseHtml(html, url)
+    private fun applyParseResult(result: ParseResult) {
+        _uiState.update {
+            when (result) {
+                is ParseResult.Success -> it.copy(
+                    isLoading = false,
+                    title = result.title,
+                    parsedVariants = result.variants,
+                )
+                is ParseResult.Error -> it.copy(
+                    isLoading = false,
+                    errorMessage = result.message,
+                )
             }
         }
-        return result
     }
 }

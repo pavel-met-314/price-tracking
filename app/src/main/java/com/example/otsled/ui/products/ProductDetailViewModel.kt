@@ -29,6 +29,9 @@ class ProductDetailViewModel(
     val product = repository.observeProduct(productId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    val variants = repository.observeVariants(productId)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val history = repository.observeHistory(productId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 

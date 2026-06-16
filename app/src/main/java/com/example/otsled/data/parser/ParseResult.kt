@@ -3,8 +3,10 @@ package com.example.otsled.data.parser
 sealed class ParseResult {
     data class Success(
         val title: String,
-        val price: Double,
-    ) : ParseResult()
+        val variants: List<ParsedProductVariant>,
+    ) : ParseResult() {
+        val price: Double get() = variants.minOf { it.price }
+    }
 
     data class Error(
         val message: String,

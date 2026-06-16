@@ -1,7 +1,9 @@
 package com.example.otsled.domain.model
 
 import com.example.otsled.data.db.PriceHistoryEntryEntity
+import com.example.otsled.data.db.ProductVariantEntity
 import com.example.otsled.data.db.TrackedProductEntity
+import com.example.otsled.data.parser.ParsedProductVariant
 
 fun TrackedProductEntity.toDomain(): TrackedProduct = TrackedProduct(
     id = id,
@@ -27,9 +29,47 @@ fun TrackedProduct.toEntity(): TrackedProductEntity = TrackedProductEntity(
     notifyOnTargetReached = notifyOnTargetReached,
 )
 
+fun ProductVariantEntity.toDomain(): ProductVariant = ProductVariant(
+    id = id,
+    productId = productId,
+    variantKey = variantKey,
+    volume = volume,
+    label = label,
+    article = article,
+    lastPrice = lastPrice,
+    oldPrice = oldPrice,
+    lastCheckedAt = lastCheckedAt,
+)
+
+fun ProductVariant.toEntity(): ProductVariantEntity = ProductVariantEntity(
+    id = id,
+    productId = productId,
+    variantKey = variantKey,
+    volume = volume,
+    label = label,
+    article = article,
+    lastPrice = lastPrice,
+    oldPrice = oldPrice,
+    lastCheckedAt = lastCheckedAt,
+)
+
+fun ParsedProductVariant.toEntity(productId: Long, checkedAt: Long?): ProductVariantEntity =
+    ProductVariantEntity(
+        productId = productId,
+        variantKey = variantKey(),
+        volume = volume,
+        label = label,
+        article = article,
+        lastPrice = price,
+        oldPrice = oldPrice,
+        lastCheckedAt = checkedAt,
+    )
+
 fun PriceHistoryEntryEntity.toDomain(): PriceHistoryEntry = PriceHistoryEntry(
     id = id,
     productId = productId,
+    variantId = variantId,
+    volumeLabel = volumeLabel,
     price = price,
     checkedAt = checkedAt,
 )
@@ -37,6 +77,8 @@ fun PriceHistoryEntryEntity.toDomain(): PriceHistoryEntry = PriceHistoryEntry(
 fun PriceHistoryEntry.toEntity(): PriceHistoryEntryEntity = PriceHistoryEntryEntity(
     id = id,
     productId = productId,
+    variantId = variantId,
+    volumeLabel = volumeLabel,
     price = price,
     checkedAt = checkedAt,
 )

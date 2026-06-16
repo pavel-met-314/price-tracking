@@ -2,34 +2,28 @@ package com.example.otsled.domain
 
 import android.content.Context
 import com.example.otsled.R
-import com.example.otsled.data.parser.AllureParfumPriceParser
 import com.example.otsled.data.parser.ParseResult
-import com.example.otsled.data.parser.WebViewPriceFetcher
+import com.example.otsled.data.parser.ParsedProductVariant
+import com.example.otsled.data.parser.PricePageLoader
+import com.example.otsled.data.parser.ProductUrlNormalizer
 import com.example.otsled.data.repository.ProductRepository
 import com.example.otsled.domain.model.PriceHistoryEntry
+import com.example.otsled.domain.model.ProductVariant
 import com.example.otsled.domain.model.TrackedProduct
 import com.example.otsled.notification.PriceNotificationManager
 
 class PriceCheckUseCase(
     private val context: Context,
     private val productRepository: ProductRepository,
-    private val priceParser: AllureParfumPriceParser,
+    private val pricePageLoader: PricePageLoader,
     private val notificationManager: PriceNotificationManager,
-    private val webViewPriceFetcher: WebViewPriceFetcher,
 ) {
     suspend fun checkProduct(product: TrackedProduct): ParseResult {
-        var result = priceParser.fetchAndParse(product.url)
-        if (result is ParseResult.Error && result.message.contains("WebView")) {
-            val html = webViewPriceFetcher.fetchHtml(product.url)
-            result = if (html.isNullOrBlank()) {
-                ParseResult.Error("Не удалось загрузить страницу через WebView")
-            } else {
-                priceParser.parseHtml(html, product.url)
-            }
-        }
+        val normalizedUrl = ProductUrlNormalizer.normalize(product.url) ?: product.url
+        val result = pricePageLoader.fetchAndParse(normalizedUrl)
 
         if (result is ParseResult.Success) {
-            handleSuccessfulCheck(product, result.price, result.title)
+            handleSuccessfulCheck(product, result.title, result.variants)
         }
 
         return result
@@ -41,58 +35,94 @@ class PriceCheckUseCase(
 
     private suspend fun handleSuccessfulCheck(
         product: TrackedProduct,
-        newPrice: Double,
         newTitle: String,
+        parsedVariants: List<ParsedProductVariant>,
     ) {
         val now = System.currentTimeMillis()
-        val previousPrice = product.lastPrice
+        val previousVariants = productRepository.getVariants(product.id).associateBy { it.variantKey }
+        val savedVariants = productRepository.replaceVariants(product.id, parsedVariants, now)
+        val previousMinPrice = product.lastPrice
+        val newMinPrice = parsedVariants.minOf { it.price }
 
-        productRepository.insertHistory(
-            PriceHistoryEntry(
-                productId = product.id,
-                price = newPrice,
-                checkedAt = now,
+        savedVariants.forEach { variant ->
+            val previous = previousVariants[variant.variantKey]
+            if (previous == null || previous.lastPrice != variant.lastPrice) {
+                productRepository.insertHistory(
+                    PriceHistoryEntry(
+                        productId = product.id,
+                        variantId = variant.id,
+                        volumeLabel = variant.displayName(),
+                        price = variant.lastPrice,
+                        checkedAt = now,
+                    ),
+                )
+            }
+
+            maybeNotifyVariantChange(product, newTitle, previous, variant)
+        }
+
+        productRepository.updateProduct(
+            product.copy(
+                title = newTitle.ifBlank { product.title },
+                lastPrice = newMinPrice,
+                lastCheckedAt = now,
             ),
         )
 
-        val updated = product.copy(
-            title = newTitle.ifBlank { product.title },
-            lastPrice = newPrice,
-            lastCheckedAt = now,
+        maybeNotifyTargetReached(product, newTitle, previousMinPrice, newMinPrice, parsedVariants)
+    }
+
+    private fun maybeNotifyVariantChange(
+        product: TrackedProduct,
+        title: String,
+        previous: ProductVariant?,
+        current: ProductVariant,
+    ) {
+        if (!product.notifyOnAnyChange) return
+        if (previous == null || previous.lastPrice == current.lastPrice) return
+
+        notificationManager.showPriceAlert(
+            productId = product.id,
+            title = context.getString(R.string.price_changed_title),
+            message = context.getString(
+                R.string.price_changed_variant_message,
+                title,
+                current.displayName(),
+                formatPrice(previous.lastPrice),
+                formatPrice(current.lastPrice),
+            ),
         )
-        productRepository.updateProduct(updated)
+    }
 
-        if (previousPrice != null && previousPrice != newPrice && product.notifyOnAnyChange) {
-            notificationManager.showPriceAlert(
-                productId = product.id,
-                title = context.getString(R.string.price_changed_title),
-                message = context.getString(
-                    R.string.price_changed_message,
-                    updated.title,
-                    formatPrice(previousPrice),
-                    formatPrice(newPrice),
-                ),
-            )
-        }
+    private fun maybeNotifyTargetReached(
+        product: TrackedProduct,
+        title: String,
+        previousMinPrice: Double?,
+        newMinPrice: Double,
+        variants: List<ParsedProductVariant>,
+    ) {
+        val targetPrice = product.targetPrice ?: return
+        if (!product.notifyOnTargetReached) return
 
-        val targetPrice = product.targetPrice
-        if (
-            targetPrice != null &&
-            product.notifyOnTargetReached &&
-            newPrice <= targetPrice &&
-            (previousPrice == null || previousPrice > targetPrice)
-        ) {
-            notificationManager.showPriceAlert(
-                productId = product.id,
-                title = context.getString(R.string.target_reached_title),
-                message = context.getString(
-                    R.string.target_reached_message,
-                    updated.title,
-                    formatPrice(newPrice),
-                    formatPrice(targetPrice),
-                ),
-            )
-        }
+        val reachedVariant = variants
+            .filter { it.price <= targetPrice }
+            .minByOrNull { it.price }
+            ?: return
+
+        val wasAlreadyReached = previousMinPrice != null && previousMinPrice <= targetPrice
+        if (wasAlreadyReached) return
+
+        notificationManager.showPriceAlert(
+            productId = product.id,
+            title = context.getString(R.string.target_reached_title),
+            message = context.getString(
+                R.string.target_reached_variant_message,
+                title,
+                reachedVariant.displayName(),
+                formatPrice(reachedVariant.price),
+                formatPrice(targetPrice),
+            ),
+        )
     }
 
     private fun formatPrice(price: Double): String {

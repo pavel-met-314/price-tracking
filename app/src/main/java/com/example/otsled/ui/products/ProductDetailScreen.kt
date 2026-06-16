@@ -51,6 +51,7 @@ fun ProductDetailScreen(
         },
     )
     val product by viewModel.product.collectAsStateWithLifecycle()
+    val variants by viewModel.variants.collectAsStateWithLifecycle()
     val history by viewModel.history.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -93,14 +94,11 @@ fun ProductDetailScreen(
                 val current = product!!
                 Column {
                     Text(text = current.url, style = MaterialTheme.typography.bodySmall)
-                    val priceText = current.lastPrice?.let {
-                        stringResource(R.string.current_price, formatPrice(it))
-                    } ?: stringResource(R.string.no_price_yet)
-                    Text(text = priceText, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 8.dp))
                     current.targetPrice?.let { target ->
                         Text(
                             text = stringResource(R.string.target_price_label, formatPrice(target)),
                             color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 8.dp),
                         )
                     }
                     current.lastCheckedAt?.let { checkedAt ->
@@ -108,6 +106,19 @@ fun ProductDetailScreen(
                             text = stringResource(R.string.last_checked, DateFormatter.format(checkedAt)),
                             style = MaterialTheme.typography.bodySmall,
                         )
+                    }
+                    Text(
+                        text = stringResource(R.string.volume_prices),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(top = 16.dp, bottom = 4.dp),
+                    )
+                    if (variants.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.no_price_yet),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    } else {
+                        VariantPricesList(variants = variants)
                     }
                     Button(
                         onClick = viewModel::checkNow,
@@ -154,6 +165,9 @@ fun ProductDetailScreen(
 private fun HistoryRow(entry: PriceHistoryEntry) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
+            entry.volumeLabel?.let { label ->
+                Text(text = label, style = MaterialTheme.typography.labelMedium)
+            }
             Text(text = "${formatPrice(entry.price)} ₽", style = MaterialTheme.typography.titleSmall)
             Text(
                 text = DateFormatter.format(entry.checkedAt),

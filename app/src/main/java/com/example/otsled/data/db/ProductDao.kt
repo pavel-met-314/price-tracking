@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
@@ -30,6 +31,18 @@ interface ProductDao {
 
     @Delete
     suspend fun deleteProduct(product: TrackedProductEntity)
+
+    @Query("SELECT * FROM product_variants WHERE productId = :productId ORDER BY lastPrice ASC")
+    fun observeVariants(productId: Long): Flow<List<ProductVariantEntity>>
+
+    @Query("SELECT * FROM product_variants WHERE productId = :productId")
+    suspend fun getVariants(productId: Long): List<ProductVariantEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertVariant(variant: ProductVariantEntity): Long
+
+    @Update
+    suspend fun updateVariant(variant: ProductVariantEntity)
 
     @Query("SELECT * FROM price_history WHERE productId = :productId ORDER BY checkedAt DESC")
     fun observeHistory(productId: Long): Flow<List<PriceHistoryEntryEntity>>
