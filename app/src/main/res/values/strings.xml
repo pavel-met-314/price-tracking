@@ -1,3 +1,37 @@
 <resources>
     <string name="app_name">Otsled</string>
+    <string name="products_title">Отслеживаемые товары</string>
+    <string name="add_product">Добавить товар</string>
+    <string name="settings">Настройки</string>
+    <string name="empty_products">Нет отслеживаемых товаров</string>
+    <string name="empty_products_hint">Добавьте ссылку с allureparfum.ru</string>
+    <string name="product_url">Ссылка на товар</string>
+    <string name="target_price">Желаемая цена (необязательно)</string>
+    <string name="check_now">Проверить сейчас</string>
+    <string name="save">Сохранить</string>
+    <string name="current_price">Текущая цена: %1$s ₽</string>
+    <string name="target_price_label">Цель: %1$s ₽</string>
+    <string name="no_price_yet">Цена ещё не проверялась</string>
+    <string name="last_checked">Проверено: %1$s</string>
+    <string name="price_history">История цен</string>
+    <string name="delete_product">Удалить</string>
+    <string name="back">Назад</string>
+    <string name="settings_title">Настройки</string>
+    <string name="check_interval">Интервал проверки</string>
+    <string name="interval_minutes">%1$d мин</string>
+    <string name="foreground_service">Foreground Service</string>
+    <string name="foreground_service_desc">Стабильнее проверяет цены, но показывает постоянное уведомление</string>
+    <string name="notifications_permission">Разрешить уведомления</string>
+    <string name="notifications_permission_granted">Уведомления разрешены</string>
+    <string name="invalid_url">Укажите ссылку на allureparfum.ru</string>
+    <string name="parse_error">Ошибка: %1$s</string>
+    <string name="product_saved">Товар сохранён</string>
+    <string name="notify_on_change">Уведомлять при изменении цены</string>
+    <string name="notify_on_target">Уведомлять при достижении цели</string>
+    <string name="foreground_notification_title">Otsled проверяет цены</string>
+    <string name="foreground_notification_text">Фоновая проверка активна</string>
+    <string name="price_changed_title">Цена изменилась</string>
+    <string name="price_changed_message">%1$s: %2$s ₽ → %3$s ₽</string>
+    <string name="target_reached_title">Цель достигнута</string>
+    <string name="target_reached_message">%1$s: %2$s ₽ (цель %3$s ₽)</string>
 </resources>
