@@ -21,6 +21,16 @@ class ProductUrlNormalizerTest {
     }
 
     @Test
+    fun inferTitleFromUrl_buildsTitleFromProductPath() {
+        assertEquals(
+            "Xerjoff 1861 Naxos",
+            ProductUrlNormalizer.inferTitleFromUrl(
+                "katalog/zhenskaya-parfyumeriya/xerjoff/1861-naxos.html",
+            ),
+        )
+    }
+
+    @Test
     fun isSupportedUrl_acceptsPartialPath() {
         assertTrue(
             ProductUrlNormalizer.isSupportedUrl(

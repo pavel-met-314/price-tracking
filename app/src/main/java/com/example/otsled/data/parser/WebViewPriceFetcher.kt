@@ -13,6 +13,7 @@ import kotlin.coroutines.resume
 data class WebPageContent(
     val html: String?,
     val variants: List<ParsedProductVariant>,
+    val title: String? = null,
 )
 
 class WebViewPriceFetcher(private val context: Context) {
@@ -30,6 +31,7 @@ class WebViewPriceFetcher(private val context: Context) {
                 var finished = false
                 val handler = Handler(Looper.getMainLooper())
                 var bestHtml: String? = null
+                var bestTitle: String? = null
                 var bestVariants: List<ParsedProductVariant> = emptyList()
                 var attempts = 0
 
@@ -40,7 +42,11 @@ class WebViewPriceFetcher(private val context: Context) {
                     webView.destroy()
                     if (continuation.isActive) {
                         continuation.resume(
-                            WebPageContent(html = bestHtml, variants = bestVariants),
+                            WebPageContent(
+                                html = bestHtml,
+                                variants = bestVariants,
+                                title = bestTitle,
+                            ),
                         )
                     }
                 }
@@ -54,8 +60,11 @@ class WebViewPriceFetcher(private val context: Context) {
                         if (variants.size > bestVariants.size) {
                             bestVariants = variants
                         }
-                        if (bestVariants.size >= 2) {
-                            complete()
+                    }
+
+                    webView.evaluateJavascript(TITLE_EXTRACT_JS) { titleJson ->
+                        decodeJsString(titleJson)?.takeIf { it.isNotBlank() }?.let { title ->
+                            bestTitle = title
                         }
                     }
 
@@ -65,17 +74,20 @@ class WebViewPriceFetcher(private val context: Context) {
                         val html = decodeJsString(htmlResult)
                         if (!html.isNullOrBlank() && !isChallengePage(html)) {
                             bestHtml = html
-                            val parsed = AllureParfumPriceParser().parseHtml(html, url)
-                            if (parsed is ParseResult.Success && parsed.variants.size > bestVariants.size) {
-                                bestVariants = parsed.variants
-                            }
-                            if (bestVariants.size >= 2) {
-                                complete()
+                            parser.parseHtmlOrNull(html, url)?.let { parsed ->
+                                if (parsed.variants.size > bestVariants.size) {
+                                    bestVariants = parsed.variants
+                                }
+                                if (bestTitle.isNullOrBlank()) {
+                                    bestTitle = parsed.title
+                                }
                             }
                         }
                     }
 
                     if (attempts >= MAX_ATTEMPTS) {
+                        complete()
+                    } else if (bestVariants.size >= 2 && !bestTitle.isNullOrBlank()) {
                         complete()
                     } else {
                         handler.postDelayed({ tryExtract() }, RETRY_DELAY_MS)
@@ -99,6 +111,8 @@ class WebViewPriceFetcher(private val context: Context) {
             }
         }
     }
+
+    private val parser = AllureParfumPriceParser()
 
     suspend fun fetchHtml(rawUrl: String): String? = fetchContent(rawUrl)?.html
 
@@ -147,6 +161,19 @@ class WebViewPriceFetcher(private val context: Context) {
         private const val TIMEOUT_MS = 35_000L
         private const val RETRY_DELAY_MS = 1_500L
         private const val MAX_ATTEMPTS = 8
+
+        private val TITLE_EXTRACT_JS = """
+            (function() {
+              var og = document.querySelector('meta[property="og:title"]');
+              if (og && og.content) return og.content.trim();
+              var h1 = document.querySelector('h1');
+              if (h1 && h1.innerText) return h1.innerText.trim();
+              var name = document.querySelector('[itemprop="name"]');
+              if (name && name.innerText) return name.innerText.trim();
+              if (document.title) return document.title.split(' - ')[0].trim();
+              return '';
+            })();
+        """.trimIndent()
 
         private val VARIANTS_EXTRACT_JS = """
             (function() {

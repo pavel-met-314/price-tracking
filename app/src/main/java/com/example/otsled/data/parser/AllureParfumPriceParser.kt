@@ -46,14 +46,20 @@ class AllureParfumPriceParser(
     }
 
     fun parseHtml(html: String, url: String = ""): ParseResult {
+        return parseHtmlOrNull(html, url)
+            ?: ParseResult.Error("Не удалось определить название товара")
+    }
+
+    fun parseHtmlOrNull(html: String, url: String = ""): ParseResult.Success? {
         val document = Jsoup.parse(html, url)
 
         val title = extractTitle(document)
-            ?: return ParseResult.Error("Не удалось определить название товара")
+            ?: ProductUrlNormalizer.inferTitleFromUrl(url)
+            ?: return null
 
         val variants = extractVariants(document, html)
         if (variants.isEmpty()) {
-            return ParseResult.Error("Не удалось определить цены по объёмам")
+            return null
         }
 
         return ParseResult.Success(title = title, variants = variants)
@@ -61,6 +67,7 @@ class AllureParfumPriceParser(
 
     fun extractTitleFromHtml(html: String, url: String = ""): String? {
         return extractTitle(Jsoup.parse(html, url))
+            ?: ProductUrlNormalizer.inferTitleFromUrl(url)
     }
 
     private fun extractTitle(document: Document): String? {

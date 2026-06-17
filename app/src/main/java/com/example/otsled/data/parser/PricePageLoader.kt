@@ -22,15 +22,15 @@ class PricePageLoader(
                 (httpResult as? ParseResult.Error)?.message ?: "Не удалось загрузить страницу",
             )
 
-        val title = content.html?.let { parser.extractTitleFromHtml(it, url) }
         val variants = when {
             content.variants.size > 1 -> content.variants
             content.html != null -> {
-                val parsed = parser.parseHtml(content.html, url)
-                if (parsed is ParseResult.Success && parsed.variants.isNotEmpty()) {
-                    parsed.variants
-                } else {
-                    content.variants
+                val parsed = parser.parseHtmlOrNull(content.html, url)
+                when {
+                    parsed != null && parsed.variants.size > content.variants.size -> parsed.variants
+                    content.variants.isNotEmpty() -> content.variants
+                    parsed != null -> parsed.variants
+                    else -> emptyList()
                 }
             }
             else -> content.variants
@@ -40,10 +40,27 @@ class PricePageLoader(
             return ParseResult.Error("Не удалось определить цены по объёмам")
         }
 
-        val resolvedTitle = title
-            ?: (content.html?.let { parser.parseHtml(it, url) } as? ParseResult.Success)?.title
+        val resolvedTitle = resolveTitle(rawUrl, url, content)
             ?: return ParseResult.Error("Не удалось определить название товара")
 
         return ParseResult.Success(title = resolvedTitle, variants = variants)
+    }
+
+    private fun resolveTitle(
+        rawUrl: String,
+        url: String,
+        content: WebPageContent,
+    ): String? {
+        content.title?.takeIf { it.isNotBlank() }?.let { return it }
+
+        content.html?.let { html ->
+            parser.extractTitleFromHtml(html, url)?.let { return it }
+            parser.parseHtmlOrNull(html, url)?.title?.let { return it }
+        }
+
+        ProductUrlNormalizer.inferTitleFromUrl(rawUrl)?.let { return it }
+        ProductUrlNormalizer.inferTitleFromUrl(url)?.let { return it }
+
+        return null
     }
 }
