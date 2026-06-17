@@ -16,6 +16,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -55,12 +56,34 @@ fun AddProductScreen(
                 },
             )
         },
+        bottomBar = {
+            Surface(tonalElevation = 3.dp) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Button(
+                        onClick = viewModel::checkNow,
+                        enabled = !uiState.isLoading,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.check_now))
+                    }
+                    Button(
+                        onClick = viewModel::saveProduct,
+                        enabled = !uiState.isLoading,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                    ) {
+                        Text(stringResource(R.string.save))
+                    }
+                }
+            }
+        },
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp)
+                .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState()),
         ) {
             OutlinedTextField(
@@ -116,27 +139,7 @@ fun AddProductScreen(
             }
 
             if (uiState.isLoading) {
-                CircularProgressIndicator(modifier = Modifier.padding(top = 16.dp))
-            }
-
-            Button(
-                onClick = viewModel::checkNow,
-                enabled = !uiState.isLoading,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp),
-            ) {
-                Text(stringResource(R.string.check_now))
-            }
-
-            Button(
-                onClick = viewModel::saveProduct,
-                enabled = !uiState.isLoading,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-            ) {
-                Text(stringResource(R.string.save))
+                CircularProgressIndicator(modifier = Modifier.padding(top = 16.dp, bottom = 16.dp))
             }
         }
     }
