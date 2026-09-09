@@ -19,6 +19,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
+    # Без явного bash GitHub запускает steps как `bash -e {0}` (без pipefail), и любой
+    # конвейер с tee проглатывает код ошибки Gradle: шаг «зелёный», а сборка упала.
+    defaults:
+      run:
+        shell: bash
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -54,7 +60,7 @@ jobs:
       # Поэтому ошибки компиляции дублируются аннотациями: их видно в Check Runs API
       # и в интерфейсе PR, и этого достаточно, чтобы разобрать падение.
       - name: Publish errors as annotations
-        if: failure()
+        if: always()
         run: |
           log=""
           if [ -s /tmp/assemble.log ]; then
@@ -63,7 +69,9 @@ jobs:
             log=/tmp/tests.log
           fi
           if [ -z "$log" ]; then
-            echo "::error::Сборка упала до запуска Gradle (смотрите лог шагов)"
+            exit 0
+          fi
+          if ! grep -qE "BUILD FAILED|^e: |error:" "$log"; then
             exit 0
           fi
           # Отдельный файл вместо конвейера с head: иначе pipefail + SIGPIPE дают
