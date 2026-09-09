@@ -1,5 +1,6 @@
 package com.example.otsled.data.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -31,4 +32,9 @@ data class ProductVariantEntity(
     val lastPrice: Double,
     val oldPrice: Double? = null,
     val lastCheckedAt: Long? = null,
+    /** Вариант пропал со страницы (сня объём или распродали) — строку сохраняем ради истории,
+     * но в «минимальной цене» товара и в уведомлениях она уже не участвует. */
+    @ColumnInfo(defaultValue = "1")
+    val isTracked: Boolean = true,
+    val lastSeenAt: Long? = null,
 )

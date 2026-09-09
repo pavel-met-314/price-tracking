@@ -6,11 +6,19 @@ import com.example.otsled.data.parser.AllureParfumPriceParser
 import com.example.otsled.data.parser.PricePageLoader
 import com.example.otsled.data.parser.WebViewPriceFetcher
 import com.example.otsled.data.repository.ProductRepository
+import com.example.otsled.data.settings.ParseSessionStore
 import com.example.otsled.data.settings.SettingsRepository
 import com.example.otsled.domain.PriceCheckUseCase
 import com.example.otsled.notification.PriceNotificationManager
 import com.example.otsled.worker.PriceCheckScheduler
 
+/**
+ * Ручной DI без Hilt: объектов мало, а порядок инициализации важен.
+ *
+ * Всё, что держит сетевые ресурсы (OkHttpClient со своим connection pool и пулом потоков),
+ * снимается ленивыми singletons — иначе на каждом цикле проверки создавался бы новый клиент,
+ * и фоновая служба медленно текла бы потоками.
+ */
 class AppContainer(context: Context) {
     val applicationContext: Context = context.applicationContext
 
@@ -22,28 +30,45 @@ class AppContainer(context: Context) {
         SettingsRepository(applicationContext)
     }
 
+    val parseSessionStore: ParseSessionStore by lazy {
+        ParseSessionStore(applicationContext)
+    }
+
     val productRepository: ProductRepository by lazy {
         ProductRepository(database.productDao())
     }
 
-    fun priceParser(): AllureParfumPriceParser = AllureParfumPriceParser()
+    private val priceParser: AllureParfumPriceParser by lazy {
+        // Контекст нужен, чтобы OkHttp брал куки из хранилища WebView.
+        AllureParfumPriceParser(applicationContext)
+    }
 
-    fun webViewPriceFetcher(): WebViewPriceFetcher = WebViewPriceFetcher(applicationContext)
+    private val webViewPriceFetcher: WebViewPriceFetcher by lazy {
+        WebViewPriceFetcher(applicationContext)
+    }
 
-    fun pricePageLoader(): com.example.otsled.data.parser.PricePageLoader = PricePageLoader(
-        parser = priceParser(),
-        webViewFetcher = webViewPriceFetcher(),
-    )
+    val pricePageLoader: PricePageLoader by lazy {
+        PricePageLoader(
+            parser = priceParser,
+            webViewFetcher = webViewPriceFetcher,
+            sessionStore = parseSessionStore,
+        )
+    }
 
-    fun notificationManager(): PriceNotificationManager = PriceNotificationManager(applicationContext)
+    val notificationManager: PriceNotificationManager by lazy {
+        PriceNotificationManager(applicationContext)
+    }
 
-    fun priceCheckScheduler(): PriceCheckScheduler =
+    val priceCheckScheduler: PriceCheckScheduler by lazy {
         PriceCheckScheduler(applicationContext, settingsRepository)
+    }
 
-    fun priceCheckUseCase(): PriceCheckUseCase = PriceCheckUseCase(
-        context = applicationContext,
-        productRepository = productRepository,
-        pricePageLoader = pricePageLoader(),
-        notificationManager = notificationManager(),
-    )
+    val priceCheckUseCase: PriceCheckUseCase by lazy {
+        PriceCheckUseCase(
+            context = applicationContext,
+            productRepository = productRepository,
+            pricePageLoader = pricePageLoader,
+            notificationManager = notificationManager,
+        )
+    }
 }

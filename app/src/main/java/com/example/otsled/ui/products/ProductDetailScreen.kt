@@ -144,6 +144,18 @@ fun ProductDetailScreen(
                             modifier = Modifier.padding(top = 8.dp),
                         )
                     }
+                    if (uiState.errorMessage == null && current.hasCheckProblem) {
+                        Text(
+                            text = stringResource(
+                                R.string.last_error_label,
+                                current.lastErrorMessage ?: current.lastErrorCode,
+                                current.consecutiveFailures,
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
                     if (uiState.isChecking) {
                         CircularProgressIndicator(modifier = Modifier.padding(top = 8.dp))
                     }

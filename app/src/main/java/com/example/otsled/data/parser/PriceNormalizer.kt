@@ -25,17 +25,30 @@ object PriceNormalizer {
         return extractNumber(cleaned)
     }
 
-    fun extractPricesFromOfferText(text: String): List<Double> {
-        val cleaned = text
-            .replace('\u00A0', ' ')
-            .replace(articlePattern, " ")
-            .replace(volumePattern, " ")
-
-        return rubPricePattern.findAll(cleaned)
-            .mapNotNull { match -> normalize("${match.groupValues[1]} руб") }
-            .filter { it in MIN_PRICE..MAX_PRICE }
+    fun extractPricesFromOfferText(text: String): List<Double> =
+        extractOfferPrices(text)
+            .map { it.value }
             .distinct()
             .take(2)
+            .toList()
+
+    /**
+     * Все «NNN руб» в тексте строки вместе с позициями. Позиции нужны, чтобы отличить цену
+     * товара от цены доставки в той же строке: «50 мл · 4 200 руб · доставка 300 руб».
+     * Артикул и объём вырезаются символами пробелов (а не удалением), чтобы позиции не съехали.
+     */
+    fun extractOfferPrices(text: String): List<PriceOccurrence> {
+        val stripped = text
+            .replace('\u00A0', ' ')
+            .replace(articlePattern) { match -> " ".repeat(match.value.length) }
+            .replace(volumePattern) { match -> " ".repeat(match.value.length) }
+
+        return rubPricePattern.findAll(stripped)
+            .mapNotNull { match ->
+                val value = normalize("${match.groupValues[1]} руб") ?: return@mapNotNull null
+                if (value !in MIN_PRICE..MAX_PRICE) return@mapNotNull null
+                PriceOccurrence(offset = match.range.first, value = value)
+            }
             .toList()
     }
 
@@ -50,3 +63,9 @@ object PriceNormalizer {
         return numeric.toDoubleOrNull()
     }
 }
+
+/** Цена в тексте строки оффера: значение и где оно начинается. */
+data class PriceOccurrence(
+    val offset: Int,
+    val value: Double,
+)

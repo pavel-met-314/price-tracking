@@ -1,5 +1,6 @@
 package com.example.otsled.domain.model
 
+import com.example.otsled.data.db.PriceCheckLogEntity
 import com.example.otsled.data.db.PriceHistoryEntryEntity
 import com.example.otsled.data.db.ProductVariantEntity
 import com.example.otsled.data.db.TrackedProductEntity
@@ -15,6 +16,10 @@ fun TrackedProductEntity.toDomain(): TrackedProduct = TrackedProduct(
     isActive = isActive,
     notifyOnAnyChange = notifyOnAnyChange,
     notifyOnTargetReached = notifyOnTargetReached,
+    lastSuccessAt = lastSuccessAt,
+    lastErrorCode = lastErrorCode,
+    lastErrorMessage = lastErrorMessage,
+    consecutiveFailures = consecutiveFailures,
 )
 
 fun TrackedProduct.toEntity(): TrackedProductEntity = TrackedProductEntity(
@@ -27,6 +32,10 @@ fun TrackedProduct.toEntity(): TrackedProductEntity = TrackedProductEntity(
     isActive = isActive,
     notifyOnAnyChange = notifyOnAnyChange,
     notifyOnTargetReached = notifyOnTargetReached,
+    lastSuccessAt = lastSuccessAt,
+    lastErrorCode = lastErrorCode,
+    lastErrorMessage = lastErrorMessage,
+    consecutiveFailures = consecutiveFailures,
 )
 
 fun ProductVariantEntity.toDomain(): ProductVariant = ProductVariant(
@@ -39,6 +48,8 @@ fun ProductVariantEntity.toDomain(): ProductVariant = ProductVariant(
     lastPrice = lastPrice,
     oldPrice = oldPrice,
     lastCheckedAt = lastCheckedAt,
+    isTracked = isTracked,
+    lastSeenAt = lastSeenAt,
 )
 
 fun ProductVariant.toEntity(): ProductVariantEntity = ProductVariantEntity(
@@ -51,8 +62,11 @@ fun ProductVariant.toEntity(): ProductVariantEntity = ProductVariantEntity(
     lastPrice = lastPrice,
     oldPrice = oldPrice,
     lastCheckedAt = lastCheckedAt,
+    isTracked = isTracked,
+    lastSeenAt = lastSeenAt,
 )
 
+/** Снятый с продажи вариант возвращается в отслеживание сам, если объём снова появился на странице. */
 fun ParsedProductVariant.toEntity(productId: Long, checkedAt: Long?): ProductVariantEntity =
     ProductVariantEntity(
         productId = productId,
@@ -63,6 +77,8 @@ fun ParsedProductVariant.toEntity(productId: Long, checkedAt: Long?): ProductVar
         lastPrice = price,
         oldPrice = oldPrice,
         lastCheckedAt = checkedAt,
+        isTracked = true,
+        lastSeenAt = checkedAt,
     )
 
 fun PriceHistoryEntryEntity.toDomain(): PriceHistoryEntry = PriceHistoryEntry(
@@ -81,4 +97,26 @@ fun PriceHistoryEntry.toEntity(): PriceHistoryEntryEntity = PriceHistoryEntryEnt
     volumeLabel = volumeLabel,
     price = price,
     checkedAt = checkedAt,
+)
+
+fun PriceCheckLogEntity.toDomain(): PriceCheckLog = PriceCheckLog(
+    id = id,
+    productId = productId,
+    status = status,
+    kind = kind,
+    source = source,
+    message = message,
+    variantsCount = variantsCount,
+    createdAt = createdAt,
+)
+
+fun PriceCheckLog.toEntity(): PriceCheckLogEntity = PriceCheckLogEntity(
+    id = id,
+    productId = productId,
+    status = status,
+    kind = kind,
+    source = source,
+    message = message,
+    variantsCount = variantsCount,
+    createdAt = createdAt,
 )

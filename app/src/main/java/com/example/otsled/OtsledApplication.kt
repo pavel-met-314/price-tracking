@@ -13,7 +13,7 @@ class OtsledApplication : Application() {
         if (container.settingsRepository.isForegroundServiceEnabled()) {
             com.example.otsled.service.PriceCheckForegroundService.start(this)
         } else {
-            container.priceCheckScheduler().schedulePeriodicCheck()
+            container.priceCheckScheduler.schedulePeriodicCheck()
         }
     }
 }

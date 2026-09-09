@@ -4,7 +4,10 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.webkit.CookieManager
 import android.webkit.WebView
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
 import android.webkit.WebViewClient
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.json.JSONArray
@@ -14,6 +17,10 @@ data class WebPageContent(
     val html: String?,
     val variants: List<ParsedProductVariant>,
     val title: String? = null,
+    /** Страница осталась заглушкой анти-бота даже после ожидания. */
+    val challenge: Boolean = false,
+    /** WebView не смог загрузить страницу (нет сети, DNS, таймаут соединения). */
+    val loadFailed: Boolean = false,
 )
 
 class WebViewPriceFetcher(private val context: Context) {
@@ -28,17 +35,28 @@ class WebViewPriceFetcher(private val context: Context) {
                 webView.settings.domStorageEnabled = true
                 webView.settings.userAgentString = AllureParfumPriceParser.USER_AGENT
 
+                // Куки живут в общем CookieManager: их забирает OkHttp (WebViewCookieJar),
+                // поэтому пройденная один раз проверка браузера ускоряет все последующие проверки.
+                // AcceptThirdPartyCookies не трогаем: защита сайта ставит свою cookie на тот же
+                // домен, а приём сторонних куки в WebView менялся в разных версиях AndroidX.
+                val cookieManager = CookieManager.getInstance()
+                runCatching { cookieManager.setAcceptCookie(true) }
+
                 var finished = false
                 val handler = Handler(Looper.getMainLooper())
                 var bestHtml: String? = null
                 var bestTitle: String? = null
                 var bestVariants: List<ParsedProductVariant> = emptyList()
                 var attempts = 0
+                var sawChallenge = false
+                var loadFailed = false
 
                 fun complete() {
                     if (finished) return
                     finished = true
                     handler.removeCallbacksAndMessages(null)
+                    // Без flush куки остаются в памяти WebView и не достаются OkHttp-пути.
+                    runCatching { cookieManager.flush() }
                     webView.destroy()
                     if (continuation.isActive) {
                         continuation.resume(
@@ -46,6 +64,8 @@ class WebViewPriceFetcher(private val context: Context) {
                                 html = bestHtml,
                                 variants = bestVariants,
                                 title = bestTitle,
+                                challenge = sawChallenge && bestVariants.isEmpty(),
+                                loadFailed = loadFailed,
                             ),
                         )
                     }
@@ -72,6 +92,9 @@ class WebViewPriceFetcher(private val context: Context) {
                         "(function(){return document.documentElement.outerHTML;})();",
                     ) { htmlResult ->
                         val html = decodeJsString(htmlResult)
+                        if (!html.isNullOrBlank() && isChallengePage(html)) {
+                            sawChallenge = true
+                        }
                         if (!html.isNullOrBlank() && !isChallengePage(html)) {
                             bestHtml = html
                             parser.parseHtmlOrNull(html, url)?.let { parsed ->
@@ -98,6 +121,19 @@ class WebViewPriceFetcher(private val context: Context) {
                     override fun onPageFinished(view: WebView?, loadedUrl: String?) {
                         if (loadedUrl == null || !loadedUrl.contains("allureparfum.ru")) return
                         handler.postDelayed({ tryExtract() }, 500)
+                    }
+
+                    override fun onReceivedError(
+                        view: WebView?,
+                        request: WebResourceRequest?,
+                        error: WebResourceError?,
+                    ) {
+                        // Реагируем только на основную страницу: ошибки картинок/шрифтов не повод
+                        // считать, что цену получить не удалось.
+                        if (request?.isForMainFrame == true) {
+                            loadFailed = true
+                            complete()
+                        }
                     }
                 }
 
@@ -140,11 +176,7 @@ class WebViewPriceFetcher(private val context: Context) {
         }.getOrDefault(emptyList())
     }
 
-    private fun isChallengePage(html: String): Boolean {
-        return html.contains("js-challenge-script") ||
-            html.contains("jsch._jsChallenge") ||
-            html.contains("Ваш браузер не смог пройти")
-    }
+    private fun isChallengePage(html: String): Boolean = BotProtection.isChallengeHtml(html)
 
     private fun decodeJsString(result: String?): String? {
         if (result.isNullOrBlank() || result == "null") return null
@@ -186,6 +218,22 @@ class WebViewPriceFetcher(private val context: Context) {
                   .replace(/Артикул\s*\d+/gi, ' ')
                   .replace(/\d+\s*мл\.?/gi, ' ');
               }
+              function stripPerMl(text) {
+                return text
+                  .replace(/за\s*1?\s*мл[^0-9]{0,12}\d[\d\s\u00a0]{0,10}\s*(руб|₽)/gi, ' ')
+                  .replace(/\d[\d\s.,\u00a0]{0,10}\s*(₽|руб\.?)\s*\/\s*мл/gi, ' ');
+              }
+              function isNoisePrice(cleaned, index) {
+                var before = cleaned.slice(Math.max(0, index - 40), index).toLowerCase();
+                return /(доставк|самовывоз|оплат|бонус|балл|подарок|промоко|купон|рассрочк|отзыв|похож|рекоменду)/.test(before);
+              }
+              function isInsidePromoBlock(node) {
+                try {
+                  return !!node.closest('[class*="similar"], [class*="recommend"], [class*="related"], [class*="review"], [class*="comment"], [class*="footer"], [id*="similar"], [id*="recommend"]');
+                } catch (e) {
+                  return false;
+                }
+              }
               function parseRubPrice(text) {
                 var match = text.match(/(\d[\d\s\u00a0]{0,10})\s*руб/i);
                 if (!match) return null;
@@ -200,8 +248,16 @@ class WebViewPriceFetcher(private val context: Context) {
                 }).filter(Boolean);
                 if (fromNodes.length) return fromNodes;
                 var cleaned = stripNoise(text);
-                var matches = cleaned.match(/\d[\d\s\u00a0]{0,10}\s*руб\.?/gi) || [];
-                return matches.map(parseRubPrice).filter(Boolean);
+                var prices = [];
+                var re = /\d[\d\s\u00a0]{0,10}\s*руб\.?/gi;
+                var m;
+                while ((m = re.exec(cleaned)) !== null) {
+                  // Цена доставки в той же строке не должна становиться ценой товара.
+                  if (isNoisePrice(cleaned, m.index)) continue;
+                  var value = parseRubPrice(m[0]);
+                  if (value) prices.push(value);
+                }
+                return prices;
               }
               function extractLabel(text) {
                 if (/уценка/i.test(text)) return 'уценка';
@@ -211,7 +267,8 @@ class WebViewPriceFetcher(private val context: Context) {
               var seen = {};
               var selectors = 'tbody > tr, tr, [class*="offer"], [class*="trade"], [class*="sku"]';
               document.querySelectorAll(selectors).forEach(function(node) {
-                var text = (node.innerText || '').replace(/\s+/g, ' ').trim();
+                if (isInsidePromoBlock(node)) return;
+                var text = stripPerMl((node.innerText || '').replace(/\s+/g, ' ').trim());
                 if (text.length < 8 || text.length > 900) return;
                 if (!/\d+\s*мл/i.test(text)) return;
                 if (!/руб/i.test(text)) return;
@@ -221,8 +278,11 @@ class WebViewPriceFetcher(private val context: Context) {
                 if (!volume) return;
                 var prices = extractPrices(node, text);
                 if (!prices.length) return;
-                var price = prices[0];
-                var oldPrice = prices.length > 1 ? prices[1] : null;
+                // Актуальная цена — наименьшая: зачёркнутая старая всегда больше, а порядок
+                // цифр в разметке предсказывать нельзя.
+                var price = Math.min.apply(null, prices);
+                var biggest = Math.max.apply(null, prices);
+                var oldPrice = biggest > price ? biggest : null;
                 var articleMatch = text.match(/Артикул\s*(\d+)/i);
                 var article = articleMatch ? articleMatch[1] : null;
                 var label = extractLabel(text);

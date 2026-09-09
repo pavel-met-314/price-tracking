@@ -24,7 +24,7 @@ class ProductDetailViewModel(
     private val productId: Long,
 ) : ViewModel() {
     private val repository = container.productRepository
-    private val priceCheckUseCase = container.priceCheckUseCase()
+    private val priceCheckUseCase = container.priceCheckUseCase
 
     val product = repository.observeProduct(productId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)

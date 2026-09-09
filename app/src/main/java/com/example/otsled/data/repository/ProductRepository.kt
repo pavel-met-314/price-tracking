@@ -2,6 +2,7 @@ package com.example.otsled.data.repository
 
 import com.example.otsled.data.db.ProductDao
 import com.example.otsled.data.parser.ParsedProductVariant
+import com.example.otsled.domain.model.PriceCheckLog
 import com.example.otsled.domain.model.PriceHistoryEntry
 import com.example.otsled.domain.model.ProductVariant
 import com.example.otsled.domain.model.TrackedProduct
@@ -25,6 +26,9 @@ class ProductRepository(
     fun observeHistory(productId: Long): Flow<List<PriceHistoryEntry>> =
         productDao.observeHistory(productId).map { list -> list.map { it.toDomain() } }
 
+    fun observeLog(limit: Int = LOG_LIMIT): Flow<List<PriceCheckLog>> =
+        productDao.observeLog(limit).map { list -> list.map { it.toDomain() } }
+
     suspend fun getActiveProducts(): List<TrackedProduct> =
         productDao.getActiveProducts().map { it.toDomain() }
 
@@ -33,6 +37,10 @@ class ProductRepository(
 
     suspend fun getVariants(productId: Long): List<ProductVariant> =
         productDao.getVariants(productId).map { it.toDomain() }
+
+    /** Варианты, которые сейчас реально есть на странице товара — без снятых с продажи. */
+    suspend fun getTrackedVariants(productId: Long): List<ProductVariant> =
+        productDao.getTrackedVariants(productId).map { it.toDomain() }
 
     suspend fun insertProduct(product: TrackedProduct): Long =
         productDao.insertProduct(product.toEntity())
@@ -43,8 +51,13 @@ class ProductRepository(
 
     suspend fun deleteProduct(product: TrackedProduct) {
         productDao.deleteProduct(product.toEntity())
+        productDao.deleteLogForProduct(product.id)
     }
 
+    /**
+     * Синхронизация вариантов со страницей: найденные обновляются, исчезнувшие помечаются
+     * неактуальными, но не удаляются — на них ссылается история цен.
+     */
     suspend fun replaceVariants(
         productId: Long,
         parsedVariants: List<ParsedProductVariant>,
@@ -52,6 +65,7 @@ class ProductRepository(
     ): List<ProductVariant> {
         val existingByKey = productDao.getVariants(productId).associateBy { it.variantKey }
         val result = mutableListOf<ProductVariant>()
+        val seenIds = mutableListOf<Long>()
 
         parsedVariants.forEach { parsed ->
             val existing = existingByKey[parsed.variantKey()]
@@ -64,12 +78,47 @@ class ProductRepository(
                 productDao.updateVariant(entity.copy(id = existing.id))
                 existing.id
             }
+            seenIds += id
             result += entity.copy(id = id).toDomain()
+        }
+
+        // Пустой список сюда приходит только при осознанном «цены не найдены», и снимать
+        // тогда все варианты было бы самоубийством для истории.
+        if (seenIds.isNotEmpty()) {
+            productDao.untrackMissingVariants(productId, seenIds)
         }
 
         return result
     }
 
+    suspend fun markCheckSuccess(productId: Long, title: String, lastPrice: Double, checkedAt: Long) {
+        productDao.markCheckSuccess(
+            id = productId,
+            title = title,
+            lastPrice = lastPrice,
+            checkedAt = checkedAt,
+        )
+    }
+
+    suspend fun markCheckFailure(productId: Long, checkedAt: Long, errorCode: String, errorMessage: String?) {
+        productDao.markCheckFailure(
+            id = productId,
+            checkedAt = checkedAt,
+            errorCode = errorCode,
+            errorMessage = errorMessage,
+        )
+    }
+
     suspend fun insertHistory(entry: PriceHistoryEntry): Long =
         productDao.insertHistory(entry.toEntity())
+
+    suspend fun logCheck(entry: PriceCheckLog) {
+        productDao.insertLog(entry.toEntity())
+        productDao.pruneLog(LOG_LIMIT)
+    }
+
+    companion object {
+        /** Сколько записей журнала крутится в базе. */
+        const val LOG_LIMIT = 300
+    }
 }

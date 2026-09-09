@@ -12,8 +12,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TrackedProductEntity::class,
         ProductVariantEntity::class,
         PriceHistoryEntryEntity::class,
+        PriceCheckLogEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class OtsledDatabase : RoomDatabase() {
@@ -51,6 +52,38 @@ abstract class OtsledDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v3: состояние последних проверок (чтобы UI отличал «цена не менялась» от «парсер сломался»),
+         * отметка актуальности варианта и кольцевой журнал диагностики парсинга.
+         */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE products ADD COLUMN lastSuccessAt INTEGER")
+                db.execSQL("ALTER TABLE products ADD COLUMN lastErrorCode TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE products ADD COLUMN lastErrorMessage TEXT")
+                db.execSQL("ALTER TABLE products ADD COLUMN consecutiveFailures INTEGER NOT NULL DEFAULT 0")
+
+                db.execSQL("ALTER TABLE product_variants ADD COLUMN isTracked INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE product_variants ADD COLUMN lastSeenAt INTEGER")
+
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS price_check_log (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        productId INTEGER,
+                        status TEXT NOT NULL,
+                        kind TEXT NOT NULL,
+                        source TEXT NOT NULL,
+                        message TEXT,
+                        variantsCount INTEGER NOT NULL,
+                        createdAt INTEGER NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_price_check_log_createdAt ON price_check_log(createdAt)")
+            }
+        }
+
         fun getInstance(context: Context): OtsledDatabase {
             return instance ?: synchronized(this) {
                 instance ?: buildDatabase(context.applicationContext).also { instance = it }
@@ -59,7 +92,7 @@ abstract class OtsledDatabase : RoomDatabase() {
 
         private fun buildDatabase(context: Context): OtsledDatabase {
             return Room.databaseBuilder(context, OtsledDatabase::class.java, "otsled.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
         }
     }

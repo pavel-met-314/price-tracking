@@ -121,6 +121,22 @@ private fun ProductCard(
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(top = 8.dp),
             )
+            // Отдельно про проблему: «цена не менялась» и «мы не смогли получить цену» —
+            // для пользователя это разные ситуации, молча показывать старую цену нельзя.
+            when {
+                product.isBotBlocked -> Text(
+                    text = stringResource(R.string.problem_bot_blocked),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+                product.hasCheckProblem -> Text(
+                    text = stringResource(R.string.problem_checks_failed, product.consecutiveFailures),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
             product.targetPrice?.let { target ->
                 Text(
                     text = stringResource(R.string.target_price_label, formatPrice(target)),

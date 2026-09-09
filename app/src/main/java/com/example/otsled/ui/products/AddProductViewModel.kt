@@ -3,6 +3,7 @@ package com.example.otsled.ui.products
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.otsled.data.parser.ParseResult
+import com.example.otsled.data.parser.PricePageLoader
 import com.example.otsled.data.parser.ParsedProductVariant
 import com.example.otsled.data.parser.ProductUrlNormalizer
 import com.example.otsled.di.AppContainer
@@ -29,7 +30,7 @@ class AddProductViewModel(
     private val container: AppContainer,
 ) : ViewModel() {
     private val repository = container.productRepository
-    private val pricePageLoader = container.pricePageLoader()
+    private val pricePageLoader = container.pricePageLoader
 
     private val _uiState = MutableStateFlow(AddProductUiState())
     val uiState = _uiState.asStateFlow()
@@ -53,7 +54,7 @@ class AddProductViewModel(
     fun checkNow() {
         val url = _uiState.value.url.trim()
         if (!ProductUrlNormalizer.isSupportedUrl(url)) {
-            _uiState.update { it.copy(errorMessage = "Укажите ссылку на allureparfum.ru") }
+            _uiState.update { it.copy(errorMessage = PricePageLoader.URL_HINT) }
             return
         }
 
@@ -67,7 +68,7 @@ class AddProductViewModel(
         val state = _uiState.value
         val url = state.url.trim()
         if (!ProductUrlNormalizer.isSupportedUrl(url)) {
-            _uiState.update { it.copy(errorMessage = "Укажите ссылку на allureparfum.ru") }
+            _uiState.update { it.copy(errorMessage = PricePageLoader.URL_HINT) }
             return
         }
 
@@ -97,7 +98,13 @@ class AddProductViewModel(
                 .toDoubleOrNull()
 
             val now = System.currentTimeMillis()
-            val minPrice = variants.minOf { it.price }
+            // minOf на пустом списке бросает NoSuchElementException — вариант «страница есть,
+            // цен нет» вполне реален, поэтому проверяем явно.
+            val minPrice = variants.minOfOrNull { it.price }
+            if (minPrice == null) {
+                _uiState.update { it.copy(isLoading = false, errorMessage = PricePageLoader.NO_PRICES_HINT) }
+                return@launch
+            }
             val product = TrackedProduct(
                 url = normalizedUrl,
                 title = title,

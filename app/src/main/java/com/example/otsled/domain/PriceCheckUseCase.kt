@@ -7,10 +7,26 @@ import com.example.otsled.data.parser.ParsedProductVariant
 import com.example.otsled.data.parser.PricePageLoader
 import com.example.otsled.data.parser.ProductUrlNormalizer
 import com.example.otsled.data.repository.ProductRepository
+import com.example.otsled.domain.model.PriceCheckLog
 import com.example.otsled.domain.model.PriceHistoryEntry
 import com.example.otsled.domain.model.ProductVariant
 import com.example.otsled.domain.model.TrackedProduct
 import com.example.otsled.notification.PriceNotificationManager
+
+/** Итог прогона по всем товарам — нужен воркеру, чтобы решить, ретраить ли пакет. */
+data class CheckOutcome(
+    val total: Int,
+    val succeeded: Int,
+    val retryableFailures: Int,
+) {
+    val failed: Int get() = total - succeeded
+
+    /**
+     * Повтор имеет смысл, только если не удалось ничего: частичный успех означает, что сайт
+     * отвечает, а отдельный товар сломался по своей причине (снят с продажи, удалена страница).
+     */
+    val shouldRetry: Boolean get() = total > 0 && succeeded == 0 && retryableFailures > 0
+}
 
 class PriceCheckUseCase(
     private val context: Context,
@@ -21,24 +37,38 @@ class PriceCheckUseCase(
     suspend fun checkProduct(product: TrackedProduct): ParseResult {
         val normalizedUrl = ProductUrlNormalizer.normalize(product.url) ?: product.url
         val result = pricePageLoader.fetchAndParse(normalizedUrl)
+        val now = System.currentTimeMillis()
 
-        if (result is ParseResult.Success) {
-            handleSuccessfulCheck(product, result.title, result.variants)
+        when (result) {
+            is ParseResult.Success -> handleSuccessfulCheck(product, result, now)
+            is ParseResult.Error -> handleFailedCheck(product, result, now)
         }
 
         return result
     }
 
-    suspend fun checkAllActiveProducts() {
-        productRepository.getActiveProducts().forEach { checkProduct(it) }
+    suspend fun checkAllActiveProducts(): CheckOutcome {
+        val products = productRepository.getActiveProducts()
+        var succeeded = 0
+        var retryable = 0
+
+        products.forEach { product ->
+            when (val result = checkProduct(product)) {
+                is ParseResult.Success -> succeeded++
+                is ParseResult.Error -> if (result.isRetryable) retryable++
+            }
+        }
+
+        return CheckOutcome(total = products.size, succeeded = succeeded, retryableFailures = retryable)
     }
 
     private suspend fun handleSuccessfulCheck(
         product: TrackedProduct,
-        newTitle: String,
-        parsedVariants: List<ParsedProductVariant>,
+        result: ParseResult.Success,
+        now: Long,
     ) {
-        val now = System.currentTimeMillis()
+        val newTitle = result.title.ifBlank { product.title }
+        val parsedVariants = result.variants
         val previousVariants = productRepository.getVariants(product.id).associateBy { it.variantKey }
         val savedVariants = productRepository.replaceVariants(product.id, parsedVariants, now)
         val previousMinPrice = product.lastPrice
@@ -61,15 +91,50 @@ class PriceCheckUseCase(
             maybeNotifyVariantChange(product, newTitle, previous, variant)
         }
 
-        productRepository.updateProduct(
-            product.copy(
-                title = newTitle.ifBlank { product.title },
-                lastPrice = newMinPrice,
-                lastCheckedAt = now,
-            ),
+        productRepository.markCheckSuccess(
+            productId = product.id,
+            title = newTitle,
+            lastPrice = newMinPrice,
+            checkedAt = now,
         )
 
         maybeNotifyTargetReached(product, newTitle, previousMinPrice, newMinPrice, parsedVariants)
+
+        productRepository.logCheck(
+            PriceCheckLog(
+                productId = product.id,
+                status = PriceCheckLog.STATUS_OK,
+                kind = "",
+                source = result.source.name,
+                message = null,
+                variantsCount = parsedVariants.size,
+                createdAt = now,
+            ),
+        )
+    }
+
+    private suspend fun handleFailedCheck(
+        product: TrackedProduct,
+        error: ParseResult.Error,
+        now: Long,
+    ) {
+        productRepository.markCheckFailure(
+            productId = product.id,
+            checkedAt = now,
+            errorCode = error.kind.name,
+            errorMessage = error.message,
+        )
+        productRepository.logCheck(
+            PriceCheckLog(
+                productId = product.id,
+                status = PriceCheckLog.STATUS_ERROR,
+                kind = error.kind.name,
+                source = "",
+                message = error.message,
+                variantsCount = 0,
+                createdAt = now,
+            ),
+        )
     }
 
     private fun maybeNotifyVariantChange(
