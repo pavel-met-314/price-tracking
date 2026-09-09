@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
@@ -52,6 +54,7 @@ fun AddProductScreen(
     viewModelFactory: AppViewModelFactory,
     onBack: () -> Unit,
     onSaved: () -> Unit,
+    onOpenBrowserCheck: () -> Unit,
 ) {
     val viewModel: AddProductViewModel = viewModel(factory = viewModelFactory)
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -114,6 +117,7 @@ fun AddProductScreen(
                 onSearch = viewModel::runSearch,
                 onClear = viewModel::clearSearch,
                 onPick = viewModel::useSearchHit,
+                onOpenBrowserCheck = onOpenBrowserCheck,
             )
 
             OutlinedTextField(
@@ -195,6 +199,7 @@ private fun SearchBlock(
     onSearch: () -> Unit,
     onClear: () -> Unit,
     onPick: (SiteSearchHit) -> Unit,
+    onOpenBrowserCheck: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -261,13 +266,18 @@ private fun SearchBlock(
             }
 
             if (retryable) {
-                OutlinedButton(
-                    onClick = onSearch,
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 8.dp),
                 ) {
-                    Text(stringResource(R.string.search_retry))
+                    OutlinedButton(onClick = onSearch, modifier = Modifier.weight(1f)) {
+                        Text(stringResource(R.string.search_retry))
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = onOpenBrowserCheck, modifier = Modifier.weight(1f)) {
+                        Text(stringResource(R.string.browser_check_open))
+                    }
                 }
             }
 

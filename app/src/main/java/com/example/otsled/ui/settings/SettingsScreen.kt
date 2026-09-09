@@ -43,6 +43,7 @@ import com.example.otsled.util.DateFormatter
 fun SettingsScreen(
     viewModelFactory: AppViewModelFactory,
     onBack: () -> Unit,
+    onOpenBrowserCheck: () -> Unit,
 ) {
     val viewModel: SettingsViewModel = viewModel(factory = viewModelFactory)
     val interval by viewModel.checkIntervalMinutes.collectAsStateWithLifecycle()
@@ -148,9 +149,17 @@ fun SettingsScreen(
                 }
             }
 
+            // Если проверка требует человека, сброс кулдауна ничего не даст: сначала её нужно
+            // пройти — для этого и есть этот экран.
+            OutlinedButton(
+                onClick = onOpenBrowserCheck,
+                modifier = Modifier.padding(top = 12.dp),
+            ) {
+                Text(stringResource(R.string.browser_check_open))
+            }
             OutlinedButton(
                 onClick = viewModel::resetParseSession,
-                modifier = Modifier.padding(top = 12.dp),
+                modifier = Modifier.padding(top = 8.dp),
             ) {
                 Text(stringResource(R.string.reset_parse_session))
             }

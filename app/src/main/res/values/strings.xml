@@ -72,4 +72,11 @@
     <string name="search_clear">Сбросить</string>
     <string name="search_retry">Повторить поиск</string>
     <string name="product_url_or_search">Ссылка на товар</string>
+    <string name="browser_check_title">Проверка браузера</string>
+    <string name="browser_check_open">Пройти проверку в приложении</string>
+    <string name="browser_check_instruction">Иногда сайт показывает проверку, которую может пройти только человек: капчу или кнопку «я не робот». Дождитесь, пока здесь откроется каталог, и ответьте на вопросы, если они появятся. Куки в приложении общие, поэтому после пройденной проверки снова работают и поиск, и фоновые проверки цен.</string>
+    <string name="browser_check_status_waiting">Страница пока закрыта проверкой…</string>
+    <string name="browser_check_status_passed">Похоже, сайт пустил — можно возвращаться.</string>
+    <string name="browser_check_done">Готово, вернуться</string>
+    <string name="browser_check_reset">Сбросить состояние проверки</string>
 </resources>

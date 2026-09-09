@@ -36,6 +36,11 @@ object BotProtection {
         RegexOption.IGNORE_CASE,
     )
 
+    private val SCRIPT_BLOCK_REGEX = Regex("(?is)<script[^>]*>.*?</script>")
+    private val STYLE_BLOCK_REGEX = Regex("(?is)<style[^>]*>.*?</style>")
+    private val TAG_REGEX = Regex("<[^>]+>")
+    private val WHITESPACE_REGEX = Regex("\\s+")
+
     /** Максимальная длина «заглушки»: настоящая страница товара вместе со скриптами всегда длиннее. */
     private const val STUB_HTML_LIMIT = 40_000
 
@@ -49,6 +54,33 @@ object BotProtection {
         return lower.length < STUB_HTML_LIMIT &&
             !looksLikeProductPage &&
             CHALLENGE_HINT_REGEX.containsMatchIn(lower)
+    }
+
+    /**
+     * Короткая текстовая выжимка из страницы-заглушки. Нужна потому, что «Сайт запросил проверку
+     * браузера» ничего не объясняет, а первая строка текста страницы сразу различает три разных
+     * случая: автотест (пройдёт сам), капчу (нужен человек) и «доступ ограничен с вашего IP»
+     * (приложение бессильно). Теги срезаются грубо: разметка неизвестна, а тащить ради одной
+     * строки полный парсер нечем.
+     */
+    fun stubSummary(html: String?, maxLength: Int = 160): String? {
+        if (html.isNullOrBlank()) return null
+
+        // Тело страницы, причём вместе с «>» открывающего тега: иначе в начало выжимки
+        // попадает мусор из атрибутов (<body class="…">).
+        val bodyStart = html.indexOf("<body", ignoreCase = true)
+        val source = if (bodyStart >= 0) html.substring(bodyStart).substringAfter('>') else html
+        val text = source
+            .substringBefore("</body>")
+            .let { SCRIPT_BLOCK_REGEX.replace(it, " ") }
+            .let { STYLE_BLOCK_REGEX.replace(it, " ") }
+            .let { TAG_REGEX.replace(it, " ") }
+            .replace('\u00A0', ' ')
+            .let { WHITESPACE_REGEX.replace(it, " ") }
+            .trim()
+
+        if (text.isBlank()) return null
+        return text.take(maxLength)
     }
 
     fun describeHttpError(code: Int): String? = when (code) {

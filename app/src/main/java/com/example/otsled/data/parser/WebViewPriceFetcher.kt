@@ -17,6 +17,8 @@ data class WebPageContent(
     val html: String?,
     val variants: List<ParsedProductVariant>,
     val title: String? = null,
+    /** Что именно написал сайт на заглушке: «автотест», капча или «доступ ограничен». */
+    val stubText: String? = null,
     /** Страница осталась заглушкой анти-бота даже после ожидания. */
     val challenge: Boolean = false,
     /** WebView не смог загрузить страницу (нет сети, DNS, таймаут соединения). */
@@ -56,6 +58,7 @@ class WebViewPriceFetcher(private val context: Context) {
                 var bestVariants: List<ParsedProductVariant> = emptyList()
                 var attempts = 0
                 var sawChallenge = false
+                var lastStubHtml: String? = null
                 var loadFailed = false
 
                 fun complete() {
@@ -77,6 +80,7 @@ class WebViewPriceFetcher(private val context: Context) {
                                 // блокировкой, а настоящий диагноз терялся.
                                 challenge = sawChallenge && bestHtml == null,
                                 loadFailed = loadFailed,
+                                stubText = if (bestHtml == null) BotProtection.stubSummary(lastStubHtml) else null,
                             ),
                         )
                     }
@@ -105,6 +109,7 @@ class WebViewPriceFetcher(private val context: Context) {
                         val html = decodeJsString(htmlResult)
                         if (!html.isNullOrBlank() && isChallengePage(html)) {
                             sawChallenge = true
+                            lastStubHtml = html
                         }
                         if (!html.isNullOrBlank() && !isChallengePage(html)) {
                             bestHtml = html

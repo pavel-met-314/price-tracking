@@ -18,6 +18,8 @@ class AppViewModelFactory(
                 throw IllegalArgumentException("ProductDetailViewModel requires productId")
             modelClass.isAssignableFrom(com.example.otsled.ui.settings.SettingsViewModel::class.java) ->
                 com.example.otsled.ui.settings.SettingsViewModel(container) as T
+            modelClass.isAssignableFrom(com.example.otsled.ui.challenge.BrowserCheckViewModel::class.java) ->
+                com.example.otsled.ui.challenge.BrowserCheckViewModel(container) as T
             else -> throw IllegalArgumentException("Unknown ViewModel: ${modelClass.name}")
         }
     }

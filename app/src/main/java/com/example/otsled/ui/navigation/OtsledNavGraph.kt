@@ -7,6 +7,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.example.otsled.ui.AppViewModelFactory
+import com.example.otsled.ui.challenge.BrowserCheckScreen
 import com.example.otsled.ui.products.AddProductScreen
 import com.example.otsled.ui.products.ProductDetailScreen
 import com.example.otsled.ui.products.ProductListScreen
@@ -41,6 +42,7 @@ fun OtsledNavGraph(
                 onSaved = {
                     navController.popBackStack()
                 },
+                onOpenBrowserCheck = { navController.navigate(Routes.BROWSER_CHECK) },
             )
         }
         composable(
@@ -61,6 +63,13 @@ fun OtsledNavGraph(
             SettingsScreen(
                 viewModelFactory = viewModelFactory,
                 onBack = { navController.popBackStack() },
+                onOpenBrowserCheck = { navController.navigate(Routes.BROWSER_CHECK) },
+            )
+        }
+        composable(Routes.BROWSER_CHECK) {
+            BrowserCheckScreen(
+                viewModelFactory = viewModelFactory,
+                onDone = { navController.popBackStack() },
             )
         }
     }

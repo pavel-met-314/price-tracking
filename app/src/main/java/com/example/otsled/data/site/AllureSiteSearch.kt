@@ -14,15 +14,15 @@ import okhttp3.Request
 /**
  * Поиск по названию на allureparfum.ru — чтобы не просить пользователя копировать ссылку.
  *
- * Путь тот же, что и у проверки цены: сначала быстрый HTTP, и только если сайт ответил
- * проверкой браузера (или обрезанным ответом) — WebView, который эту проверку исполняет.
- * Порядок диктует [ParseSessionStore], а не «угадываем каждый раз»: прогрев защиты стоит
- * десятки секунд, и жрать их на каждый запрос нельзя.
+ * Путь тот же, что и у проверки цены: HTTP и WebView, порядок выбирает [ParseSessionStore], а
+ * отказ одного пути не закрывает другой (см. [com.example.otsled.data.parser.PricePageLoader]).
+ * Прогрев защиты общий: куки лежат в одном CookieManager, поэтому успешно пройденная проверка
+ * товара делает доступным и поиск, и наоборот.
  *
- * Второе отличие от цены: здесь мы не можем видеть разметку выдачи, поэтому каждый исход
- * сопровождается [SiteSearchResult.note] — короткий диагноз (HTTP-код, размер страницы, число
- * найденных ссылок). Он попадает в «Журнал проверок» и в UI: без него «пусто на телефоне»
- * неотличимо от «сайт изменился» и от «мы не дождались».
+ * Второе отличие от цены: разметку выдачи мы живьём не видим, поэтому каждый исход
+ * сопровождается [SiteSearchResult.note] — коротким диагнозом (что пробовали, что получили,
+ * сколько ссылок на товары увидели). Он показывается в интерфейсе и попадает в «Журнал
+ * проверок»: без него «пусто на телефоне» неотличимо от «сайт изменился» и от «мы не дождались».
  */
 class AllureSiteSearch(
     context: Context,
@@ -39,80 +39,57 @@ class AllureSiteSearch(
         val normalizedQuery = query.trim()
         val url = SiteSearchQuery.searchUrl(normalizedQuery)
         val notes = mutableListOf<String>()
+        val preferWebView = sessionStore?.shouldPreferWebView() == true
         var challengeSeen = false
+        var links = 0
 
-        if (sessionStore?.shouldPreferWebView() == true) {
-            notes += "HTTP пропущен (после проверки браузера идём в WebView)"
+        if (preferWebView) {
+            notes += "HTTP отложен: после проверки браузера сначала WebView"
         } else {
-            when (val fetched = fetchHtml(url)) {
-                is Fetch.Ok -> {
-                    val links = SiteSearchQuery.countProductLinks(fetched.html)
-                    notes += "HTTP 200, ${kib(fetched.html)}, ссылок на товары $links"
-                    val hits = SiteSearchQuery.extractHits(fetched.html, normalizedQuery)
-                    if (hits.isNotEmpty()) {
-                        sessionStore?.markSuccess()
-                        return@withContext SiteSearchResult.Success(
-                            query = normalizedQuery,
-                            hits = hits,
-                            note = notes.summary(),
-                        )
-                    }
-                    if (!looksBlocked(fetched.html)) {
-                        // Страница ответа дошла целиком и это не заглушка: значит совпадений нет
-                        // (или выдача устроена иначе) — WebView тут ничего не добавит.
-                        return@withContext SiteSearchResult.Success(
-                            query = normalizedQuery,
-                            hits = emptyList(),
-                            note = notes.summary(),
-                        )
-                    }
-                    sessionStore?.markChallengeHit()
-                    challengeSeen = true
-                    notes += "HTTP: проверка браузера"
-                }
-
-                is Fetch.Challenge -> {
-                    sessionStore?.markChallengeHit()
-                    challengeSeen = true
-                    notes += "HTTP: проверка браузера"
-                }
-
-                is Fetch.HttpStatus -> {
-                    notes += "HTTP ${fetched.code}: ${fetched.message}"
-                    if (fetched.code == 404) {
-                        // Поиска на сайте нет — WebView тут не поможет, страница не появится.
-                        return@withContext SiteSearchResult.Error(
-                            NO_SEARCH_PAGE_HINT,
-                            SiteSearchResult.Kind.NOT_FOUND,
-                            note = notes.summary(),
-                        )
-                    }
-                }
-
-                is Fetch.Failed -> notes += "HTTP: ${fetched.message}"
+            val attempt = httpAttempt(url, normalizedQuery, notes, "HTTP")
+            attempt.fatal?.let { return@withContext it.withNote(notes) }
+            links = maxOf(links, attempt.links)
+            if (attempt.hits.isNotEmpty()) {
+                sessionStore?.markSuccess()
+                return@withContext SiteSearchResult.Success(
+                    query = normalizedQuery,
+                    hits = attempt.hits,
+                    note = notes.summary(),
+                )
             }
+            if (!attempt.blocked) {
+                // Страница пришла целиком и это не заглушка: совпадений нет, WebView ничего не
+                // добавит — только сожжёт десятки секунд.
+                return@withContext SiteSearchResult.Success(
+                    query = normalizedQuery,
+                    hits = emptyList(),
+                    note = notes.summary(),
+                )
+            }
+            challengeSeen = true
         }
 
-        // Первая попытка часто уходит в незавершённую проверку браузера: куки проставляются
-        // во время неё, поэтому одна пауза и повтор решают исход, а повторять бесконечно нельзя.
+        // Первая попытка обычно ловит незавершённую проверку браузера; куки после неё уже
+        // проставлены, поэтому один повтор через паузу решает исход. Крутиться бесконечно нельзя.
         var lastHtml: String? = null
-        var lastLoadFailed = false
+        var loadFailed = false
         for (attempt in 1..WEBVIEW_ATTEMPTS) {
             val content = webViewFetcher.fetchContent(
                 rawUrl = url,
                 readyWhen = { html -> !html.isNullOrBlank() },
             )
             lastHtml = content?.html
-            lastLoadFailed = content?.loadFailed == true
+            loadFailed = content?.loadFailed == true
+            links = maxOf(links, SiteSearchQuery.countProductLinks(lastHtml))
 
-            val links = SiteSearchQuery.countProductLinks(lastHtml)
             notes += "WebView #$attempt: " + when {
                 lastHtml.isNullOrBlank() -> "страницу не отдали"
                 else -> "${kib(lastHtml)}, ссылок на товары $links"
             }
             if (content?.challenge == true) {
                 challengeSeen = true
-                notes += "WebView #$attempt: проверка браузера не пройдена"
+                notes += "WebView #$attempt: " +
+                    (content.stubText?.takeIf { it.isNotBlank() }?.let { "заглушка «$it»" } ?: "проверка браузера не пройдена")
             }
 
             val hits = SiteSearchQuery.extractHits(lastHtml, normalizedQuery)
@@ -126,26 +103,38 @@ class AllureSiteSearch(
                 )
             }
 
-            // bestHtml заполняется только на «не-заглушке», поэтому непустая страница = страница
-            // реально отрисована, и ждать второй заход смысла нет.
-            val pageWasRendered = !lastHtml.isNullOrBlank()
-            if (pageWasRendered || attempt == WEBVIEW_ATTEMPTS) break
+            // bestHtml заполняется только на «не-заглушке»: непустая страница означает, что она
+            // отрисована, и второй заход ничего не изменит.
+            if (!lastHtml.isNullOrBlank() || attempt == WEBVIEW_ATTEMPTS) break
+            delay(WEBVIEW_RETRY_DELAY_MS)
+        }
 
-            if (attempt == 1) delay(WEBVIEW_RETRY_DELAY_MS)
+        // Обходной путь: если быстрый HTTP был отложен из-за кулдауна, пробуем его сейчас.
+        if (preferWebView) {
+            val attempt = httpAttempt(url, normalizedQuery, notes, "fallback HTTP")
+            attempt.fatal?.let { return@withContext it.withNote(notes) }
+            links = maxOf(links, attempt.links)
+            if (attempt.hits.isNotEmpty()) {
+                sessionStore?.markSuccess()
+                return@withContext SiteSearchResult.Success(
+                    query = normalizedQuery,
+                    hits = attempt.hits,
+                    note = notes.summary(),
+                )
+            }
         }
 
         val summary = notes.summary()
-        val links = SiteSearchQuery.countProductLinks(lastHtml)
         when {
-            // Страница реальная (не заглушка) и ссылки на товары в ней есть, а строк нет —
-            // это наш разбор не совпал с выдачей, а не «совпадений нет».
+            // Страница реальная и ссылки на товары в ней есть, а строк нет — это наш разбор не
+            // совпал с выдачей, а не «совпадений нет».
             !lastHtml.isNullOrBlank() && links > 0 -> SiteSearchResult.Error(
                 PARSE_HINT,
                 SiteSearchResult.Kind.PARSE,
                 note = summary,
             )
 
-            // Страница реальная, ссылок нет — честно говорим «не найдено», как на HTTP-пути.
+            // Страница реальная, ссылок нет — честно «не найдено».
             !lastHtml.isNullOrBlank() -> SiteSearchResult.Success(
                 query = normalizedQuery,
                 hits = emptyList(),
@@ -153,7 +142,6 @@ class AllureSiteSearch(
                 note = summary,
             )
 
-            // Страниц так и не отдали: если по ходу была проверка браузера — виновата она.
             challengeSeen -> {
                 sessionStore?.markChallengeHit()
                 SiteSearchResult.Error(
@@ -163,16 +151,34 @@ class AllureSiteSearch(
                 )
             }
 
-            else -> SiteSearchResult.Error(
-                if (lastLoadFailed) LOAD_FAILED_HINT else CHALLENGE_HINT,
-                if (lastLoadFailed) SiteSearchResult.Kind.NETWORK else SiteSearchResult.Kind.BOT_CHALLENGE,
+            loadFailed -> SiteSearchResult.Error(
+                LOAD_FAILED_HINT,
+                SiteSearchResult.Kind.NETWORK,
                 note = summary,
             )
+
+            else -> {
+                sessionStore?.markChallengeHit()
+                SiteSearchResult.Error(
+                    CHALLENGE_HINT,
+                    SiteSearchResult.Kind.BOT_CHALLENGE,
+                    note = summary,
+                )
+            }
         }
     }
 
-    private suspend fun fetchHtml(url: String): Fetch = withContext(Dispatchers.IO) {
-        runCatching {
+    /**
+     * Быстрый путь: один GET + разбор. [label] попадает в диагноз, чтобы «HTTP» и «fallback HTTP»
+     * в журнале не выглядели одинаково.
+     */
+    private suspend fun httpAttempt(
+        url: String,
+        query: String,
+        notes: MutableList<String>,
+        label: String,
+    ): HttpAttempt {
+        val fetched = runCatching {
             val request = Request.Builder()
                 .url(url)
                 .header("User-Agent", AllureParfumPriceParser.USER_AGENT)
@@ -200,15 +206,59 @@ class AllureSiteSearch(
                 Fetch.Failed(error.message ?: "неизвестная ошибка сети")
             }
         }
+
+        return when (fetched) {
+            is Fetch.Ok -> {
+                val linkCount = SiteSearchQuery.countProductLinks(fetched.html)
+                notes += "$label ${kib(fetched.html)}, ссылок на товары $linkCount"
+                val blocked = BotProtection.isChallengeHtml(fetched.html) || fetched.html.length < SHORT_BODY_LIMIT
+                HttpAttempt(
+                    hits = SiteSearchQuery.extractHits(fetched.html, query),
+                    links = linkCount,
+                    blocked = blocked,
+                    fatal = null,
+                )
+            }
+
+            is Fetch.Challenge -> {
+                notes += "$label: страница проверки браузера"
+                sessionStore?.markChallengeHit()
+                HttpAttempt(emptyList(), 0, blocked = true, fatal = null)
+            }
+
+            is Fetch.HttpStatus -> {
+                notes += "$label ${fetched.code}: ${fetched.message}"
+                val fatal = if (fetched.code == 404) {
+                    // Поиска на сайте нет — WebView тут не поможет, страница не появится.
+                    SiteSearchResult.Error(NO_SEARCH_PAGE_HINT, SiteSearchResult.Kind.NOT_FOUND)
+                } else {
+                    null
+                }
+                HttpAttempt(emptyList(), 0, blocked = fatal == null, fatal = fatal)
+            }
+
+            is Fetch.Failed -> {
+                notes += "$label: ${fetched.message}"
+                HttpAttempt(emptyList(), 0, blocked = true, fatal = null)
+            }
+        }
     }
 
-    /** Заглушка анти-бота или обрезанный ответ: в этих случаях есть смысл переспросить через WebView. */
-    private fun looksBlocked(html: String): Boolean =
-        BotProtection.isChallengeHtml(html) || html.length < SHORT_BODY_LIMIT
+    private fun SiteSearchResult.Error.withNote(notes: List<String>): SiteSearchResult.Error =
+        if (notes.isEmpty()) this else copy(note = notes.summary())
 
     private fun kib(html: String): String = "${html.length / 1024} КБ"
 
     private fun List<String>.summary(): String? = takeIf { it.isNotEmpty() }?.joinToString("; ")
+
+    private class HttpAttempt(
+        val hits: List<SiteSearchHit>,
+        val links: Int,
+        /** true — страница не получена (заглушка/обрезана/сеть), есть смысл во втором пути. */
+        val blocked: Boolean,
+        /** Ошибка, при которой второй путь бессмысленен (страницы поиска нет вовсе). */
+        val fatal: SiteSearchResult.Error?,
+    )
 
     private sealed interface Fetch {
         data class Ok(val html: String) : Fetch
@@ -228,9 +278,10 @@ class AllureSiteSearch(
             "На сайте нет страницы поиска (HTTP 404) — вставьте ссылку на товар вручную"
         const val PARSE_HINT =
             "Страницу поиска получили, но строк в ней не увидели: похоже, выдача изменилась"
+
         /** Подсказка осмысленная: проверка любого товара по ссылке прогревает те же куки. */
         const val CHALLENGE_HINT =
-            "Сайт запросил проверку браузера. Попробуйте через пару минут или сначала добавьте " +
-            "товар по ссылке — после успешной проверки поиск идёт быстрее"
+            "Сайт запросил проверку браузера. Пройдите её в настройках («Проверка браузера») " +
+                "или попробуйте через пару минут"
     }
 }

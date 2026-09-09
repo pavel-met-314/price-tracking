@@ -5,6 +5,7 @@ object Routes {
     const val ADD_PRODUCT = "add_product"
     const val PRODUCT_DETAIL = "product_detail/{productId}"
     const val SETTINGS = "settings"
+    const val BROWSER_CHECK = "browser_check"
 
     fun productDetail(productId: Long) = "product_detail/$productId"
 }
