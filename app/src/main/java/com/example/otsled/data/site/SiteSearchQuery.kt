@@ -76,8 +76,8 @@ object SiteSearchQuery {
     private const val MAX_BRAND_LENGTH = 40
 
     /** Ссылка на страницу товара прямо в HTML — по ней понимаем, что страница готова к разбору. */
-    private val PRODUCT_HREF_REGEX = Regex("""/katalog/[^"'\s>]+\.html""", setOf(RegexOption.IGNORE_CASE, RegexOption.UNICODE_CASE))
-    private val VOLUME_REGEX = Regex("""(\d+(?:[.,]\d+)?)\s*мл\.?""", setOf(RegexOption.IGNORE_CASE, RegexOption.UNICODE_CASE))
+    private val PRODUCT_HREF_REGEX = Regex("""(?iu)/katalog/[^"'\s>]+\.html""", RegexOption.IGNORE_CASE)
+    private val VOLUME_REGEX = Regex("""(?iu)(\d+(?:[.,]\d+)?)\s*мл\.?""", RegexOption.IGNORE_CASE)
     private val WHITESPACE_REGEX = Regex("""\s+""")
 
     /** Цена в строке: «360 - 22 235 руб.», «от 5 470 руб.», «22 100 ₽». Название так не выглядит. */
@@ -103,12 +103,12 @@ object SiteSearchQuery {
     )
 
     private val LETTERS_REGEX = Regex("(?iu)[\\p{L}]{2}")
-    private val RESULT_BLOCK_REGEX = Regex("""(search|result|offer|item|product|card)""", setOf(RegexOption.IGNORE_CASE, RegexOption.UNICODE_CASE))
+    private val RESULT_BLOCK_REGEX = Regex("""(?iu)(search|result|offer|item|product|card)""", RegexOption.IGNORE_CASE)
 
     /** Вердикт страницы поиска без результатов: ждать появления товаров бессмысленно. */
     private val SEARCH_VERDICT_REGEX = Regex(
-        "(\u043d\u0438\u0447\u0435\u0433\u043e \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e|\u043d\u0435\u0442 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u043e\u0432|\u043f\u043e\u0438\u0441\u043a \u043d\u0435 \u0434\u0430\u043b|\u0441\u043e\u0432\u043f\u0430\u0434\u0435\u043d\u0438\u0439 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e|nothing found)",
-        setOf(RegexOption.IGNORE_CASE, RegexOption.UNICODE_CASE),
+        "(?iu)(\u043d\u0438\u0447\u0435\u0433\u043e \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e|\u043d\u0435\u0442 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u043e\u0432|\u043f\u043e\u0438\u0441\u043a \u043d\u0435 \u0434\u0430\u043b|\u0441\u043e\u0432\u043f\u0430\u0434\u0435\u043d\u0438\u0439 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e|nothing found)",
+        RegexOption.IGNORE_CASE,
     )
 
     private val CHROME_TAGS = setOf("header", "footer", "nav", "aside")

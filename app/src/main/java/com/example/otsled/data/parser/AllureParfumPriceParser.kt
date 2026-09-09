@@ -373,17 +373,17 @@ class AllureParfumPriceParser(
     }
 
     companion object {
-        private val VOLUME_REGEX = Regex("""(\d+)\s*мл\.?""", setOf(RegexOption.IGNORE_CASE, RegexOption.UNICODE_CASE))
-        private val VOLUME_ONLY_REGEX = Regex("""(\d+)\s*мл\.?""", setOf(RegexOption.IGNORE_CASE, RegexOption.UNICODE_CASE))
-        private val ARTICLE_REGEX = Regex("""Артикул\s*(\d+)""", setOf(RegexOption.IGNORE_CASE, RegexOption.UNICODE_CASE))
-        private val PRICE_IN_TEXT_REGEX = Regex("""(\d[\d\s\u00A0]*)\s*руб\.?""", setOf(RegexOption.IGNORE_CASE, RegexOption.UNICODE_CASE))
+        private val VOLUME_REGEX = Regex("""(?iu)(\d+)\s*мл\.?""", RegexOption.IGNORE_CASE)
+        private val VOLUME_ONLY_REGEX = Regex("""(?iu)(\d+)\s*мл\.?""", RegexOption.IGNORE_CASE)
+        private val ARTICLE_REGEX = Regex("""(?iu)Артикул\s*(\d+)""", RegexOption.IGNORE_CASE)
+        private val PRICE_IN_TEXT_REGEX = Regex("""(?iu)(\d[\d\s\u00A0]*)\s*руб\.?""", RegexOption.IGNORE_CASE)
         private val OFFER_BLOCK_REGEX = Regex(
-            """Артикул\s*(\d+)[\s\S]{0,120}?(\d+\s*мл\.?)[\s\S]{0,120}?(\d[\d\s\u00A0]+)\s*руб""",
-            setOf(RegexOption.IGNORE_CASE, RegexOption.UNICODE_CASE),
+            """(?iu)Артикул\s*(\d+)[\s\S]{0,120}?(\d+\s*мл\.?)[\s\S]{0,120}?(\d[\d\s\u00A0]+)\s*руб""",
+            RegexOption.IGNORE_CASE,
         )
         private val JSON_OFFER_REGEX = Regex(
-            """"(?:NAME|name|TITLE|title)"\s*:\s*"(?<volume>\d+\s*мл\.?)"[\s\S]{0,250}?"PRICE"\s*:\s*"(?<price>[\d.]+)"[\s\S]{0,250}?"art"[\s\S]{0,80}?"VALUE"\s*:\s*"(?<article>\d+)"""",
-            setOf(RegexOption.IGNORE_CASE, RegexOption.UNICODE_CASE),
+            """(?iu)"(?:NAME|name|TITLE|title)"\s*:\s*"(?<volume>\d+\s*мл\.?)"[\s\S]{0,250}?"PRICE"\s*:\s*"(?<price>[\d.]+)"[\s\S]{0,250}?"art"[\s\S]{0,80}?"VALUE"\s*:\s*"(?<article>\d+)"""",
+            RegexOption.IGNORE_CASE,
         )
 
         const val USER_AGENT =
