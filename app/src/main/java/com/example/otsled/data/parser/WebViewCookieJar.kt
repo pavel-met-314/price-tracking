@@ -33,15 +33,14 @@ class WebViewCookieJar(context: Context) : CookieJar {
     override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
         if (cookies.isEmpty()) return
 
-        var changed = false
         cookies.forEach { cookie ->
-            val applied = runCatching { manager.setCookie(url.toString(), cookie.toString()) }
-                .getOrDefault(false)
-            if (applied) changed = true
+            // setCookie возвращает void, поэтому результат не проверяем: исключения быть не может,
+            // а «не принято» в этом API не сигнаизируется.
+            runCatching { manager.setCookie(url.toString(), cookie.toString()) }
         }
 
         // Без flush куки остаются только в памяти WebView и теряются при остановке процесса —
         // для фоновой проверки цен это означало бы «прогретая сессия» до первой перезагрузки.
-        if (changed) runCatching { manager.flush() }
+        runCatching { manager.flush() }
     }
 }

@@ -31,9 +31,6 @@ class PriceCheckWorker(
 
     companion object {
         const val WORK_NAME = "price_check_periodic"
-
-        /** Пауза перед повтором после неудачного прогона (экспоненциально от этого значения). */
-        private const val BACKOFF_MINUTES = 5L
     }
 }
 
@@ -72,5 +69,8 @@ class PriceCheckScheduler(
 
     companion object {
         private const val MIN_INTERVAL_MINUTES = 15
+
+        /** Пауза перед повтором после неудачного прогона (растёт экспоненциально от этого значения). */
+        private const val BACKOFF_MINUTES = 5L
     }
 }
