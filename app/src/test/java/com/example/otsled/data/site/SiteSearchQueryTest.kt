@@ -167,6 +167,86 @@ class SiteSearchQueryTest {
         assertTrue(SiteSearchQuery.extractHits("<html><body>нет товаров</body></html>", "ganymede").isEmpty())
     }
 
+    /**
+     * Разметка карточки выдачи, восстановленная по живому скриншоту сайта: ссылкой является кнопка
+     * «Подробнее», а бренд и название товара — отдельные строки. Если название начать брать из текста
+     * ссылки, в списке вместо товара стоит «подробнее» — на этом поиск и провалили.
+     */
+    private val allureLikeResultsHtml = """
+        <!DOCTYPE html><html><body><main>
+        <h1>Результаты поиска «ganymede» — найдено 3 товара:</h1>
+        <div class="search-result">
+          <div class="item">
+            <div class="stamp">ХИТ</div>
+            <a href="/katalog/na_muzhchinye-arekate/marc-antoine-barrois-ganymede-76733.html">
+              <img src="/i/g1.jpg" alt="Marc-Antoine Barrois Ganymede">
+            </a>
+            <a href="/brend/marc-antoine-barrois/">Marc-Antoine Barrois</a>
+            <a href="/katalog/na_muzhchinye-arekate/marc-antoine-barrois-ganymede-76733.html">Ganymede</a>
+            <div class="price"><span>360</span> - <b>22 235</b> руб.</div>
+            <div class="gender">Унисекс</div>
+            <div>Семейство: древесные, пряные</div>
+            <a href="/katalog/na_muzhchinye-arekate/marc-antoine-barrois-ganymede-76733.html">Подробнее</a>
+            <a href="/quick/76733">Быстрый просмотр</a>
+          </div>
+          <div class="item">
+            <div class="stamp">NEW</div>
+            <a href="/katalog/na_muzhchinye-arekate/rabdan-ganymede-90001.html"><img src="/i/g3.jpg"></a>
+            <div class="titles">
+              <span class="brand">Rabdan</span>
+              <a href="/katalog/na_muzhchinye-arekate/rabdan-ganymede-90001.html">Ganymede</a>
+            </div>
+            <div class="price">485 - 11 950 руб.</div>
+            <div class="gender">Унисекс</div>
+            <a href="/katalog/na_muzhchinye-arekate/rabdan-ganymede-90001.html">Подробнее</a>
+          </div>
+        </div>
+        </main></body></html>
+    """.trimIndent()
+
+    @Test
+    fun `card title is brand plus product name, not the button label`() {
+        val titles = SiteSearchQuery.extractHits(allureLikeResultsHtml, "ganymede")
+            .associate { it.url to it.title }
+
+        assertEquals(
+            "Marc-Antoine Barrois - Ganymede",
+            titles["https://allureparfum.ru/katalog/na_muzhchinye-arekate/marc-antoine-barrois-ganymede-76733.html"],
+        )
+        assertEquals(
+            "Rabdan - Ganymede",
+            titles["https://allureparfum.ru/katalog/na_muzhchinye-arekate/rabdan-ganymede-90001.html"],
+        )
+        // Кнопка «Подробнее» не должна попадать в названия — ни целиком, ни в чьём-либо хвосте.
+        assertTrue(titles.values.none { it.contains("подробн", ignoreCase = true) })
+        assertEquals(2, titles.size)
+    }
+
+    @Test
+    fun `descriptions and prices of the card are not mistaken for the name`() {
+        val titles = SiteSearchQuery.extractHits(allureLikeResultsHtml, "ganymede").map { it.title }
+
+        assertTrue(titles.all { !it.contains("руб", ignoreCase = true) })
+        assertTrue(titles.all { !it.contains("Унисекс", ignoreCase = true) })
+        assertTrue(titles.all { !it.contains("Семейство", ignoreCase = true) })
+        assertTrue(titles.all { !it.contains("ХИТ", ignoreCase = true) })
+    }
+
+    @Test
+    fun `single name line is kept as is`() {
+        // Карточка, где бренд уже написан внутри названия: второй строки нет, придумывать её нельзя.
+        val html = """
+            <html><body><div class="item">
+              <a href="/katalog/razdel/brand/ganymede.html">Marc-Antoine Barrois Ganymede Extrait</a>
+              <div class="price">7 900 руб.</div>
+              <a href="/katalog/razdel/brand/ganymede.html">Подробнее</a>
+            </div></body></html>
+        """.trimIndent()
+
+        val hit = SiteSearchQuery.extractHits(html, "ganymede").single()
+        assertEquals("Marc-Antoine Barrois Ganymede Extrait", hit.title)
+    }
+
     @Test
     fun `header-only page is not ready for extraction`() {
         // Первый кадр страницы: отрисована шапка, результатов ещё нет. Если принять её за готовую,
