@@ -18,10 +18,16 @@ class PriceNotificationManager(private val context: Context) {
         createChannel()
     }
 
+    /**
+     * [tag] — ключ варианта. Без него все уведомления товара идут с одним id и каждое
+     * следующее перезаписывает предыдущее: из изменения цен трёх объёмов пользователь увидел
+     * бы только последнее.
+     */
     fun showPriceAlert(
         productId: Long,
         title: String,
         message: String,
+        tag: String? = null,
     ) {
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -44,7 +50,11 @@ class PriceNotificationManager(private val context: Context) {
             .setAutoCancel(true)
             .build()
 
-        notificationManager.notify(productId.toInt(), notification)
+        if (tag != null) {
+            notificationManager.notify(tag, productId.toInt(), notification)
+        } else {
+            notificationManager.notify(productId.toInt(), notification)
+        }
     }
 
     fun showForegroundNotification(): android.app.Notification {

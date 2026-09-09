@@ -80,12 +80,21 @@ jobs:
             echo "::error::${line}"
           done < /tmp/errors.trim
 
+      # Имя файла APK у разных версий AGP различается (app-debug.apk / app_debug.apk),
+      # поэтому ищем по дереву outputs и печатаем результат аннотацией.
+      - name: Locate APK
+        if: success()
+        run: |
+          files=$(find . -path "*outputs/apk/*" -name "*.apk" | tr '\n' ' ')
+          echo "::notice::APK: ${files:-не найдено}"
+
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: otsled-debug
-          path: app/build/outputs/apk/debug/*.apk
+          path: |
+            **/outputs/apk/**/*.apk
           if-no-files-found: warn
           retention-days: 14
 

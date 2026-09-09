@@ -34,6 +34,10 @@ class PriceCheckUseCase(
     private val pricePageLoader: PricePageLoader,
     private val notificationManager: PriceNotificationManager,
 ) {
+    private companion object {
+        /** Отдельный тег, чтобы «цель достигнута» не затиралась уведомлением об изменении цены. */
+        const val TARGET_NOTIFICATION_TAG = "target-price"
+    }
     suspend fun checkProduct(product: TrackedProduct): ParseResult {
         val normalizedUrl = ProductUrlNormalizer.normalize(product.url) ?: product.url
         val result = pricePageLoader.fetchAndParse(normalizedUrl)
@@ -156,6 +160,7 @@ class PriceCheckUseCase(
                 formatPrice(previous.lastPrice),
                 formatPrice(current.lastPrice),
             ),
+            tag = current.variantKey,
         )
     }
 
@@ -187,6 +192,7 @@ class PriceCheckUseCase(
                 formatPrice(reachedVariant.price),
                 formatPrice(targetPrice),
             ),
+            tag = TARGET_NOTIFICATION_TAG,
         )
     }
 
