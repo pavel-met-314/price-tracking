@@ -126,7 +126,9 @@ class AllureSiteSearch(
                 )
             }
 
-            val pageWasRendered = !lastHtml.isNullOrBlank() && content?.challenge != true
+            // bestHtml заполняется только на «не-заглушке», поэтому непустая страница = страница
+            // реально отрисована, и ждать второй заход смысла нет.
+            val pageWasRendered = !lastHtml.isNullOrBlank()
             if (pageWasRendered || attempt == WEBVIEW_ATTEMPTS) break
 
             if (attempt == 1) delay(WEBVIEW_RETRY_DELAY_MS)

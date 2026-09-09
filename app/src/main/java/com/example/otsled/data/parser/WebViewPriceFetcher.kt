@@ -71,7 +71,11 @@ class WebViewPriceFetcher(private val context: Context) {
                                 html = bestHtml,
                                 variants = bestVariants,
                                 title = bestTitle,
-                                challenge = sawChallenge && bestVariants.isEmpty(),
+                                // «Заглушка» означает, что за всё время так и не увидели настоящую
+                                // страницу. Раньше условие строилось на «нет вариантов», и страница
+                                // поиска (где вариантов нет по определению) ложно помечалась
+                                // блокировкой, а настоящий диагноз терялся.
+                                challenge = sawChallenge && bestHtml == null,
                                 loadFailed = loadFailed,
                             ),
                         )
