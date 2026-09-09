@@ -9,6 +9,7 @@ import com.example.otsled.data.parser.ProductUrlNormalizer
 import com.example.otsled.data.site.SiteSearchHit
 import com.example.otsled.data.site.SiteSearchResult
 import com.example.otsled.di.AppContainer
+import com.example.otsled.domain.model.PriceCheckLog
 import com.example.otsled.domain.model.PriceHistoryEntry
 import com.example.otsled.domain.model.TrackedProduct
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -71,6 +72,7 @@ class AddProductViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isSearching = true, searchMessage = null, searchHits = emptyList()) }
             val result = siteSearch.search(query)
+            logSearchOutcome(query, result)
             _uiState.update { state ->
                 when (result) {
                     is SiteSearchResult.Success -> state.copy(
@@ -90,6 +92,37 @@ class AddProductViewModel(
                 }
             }
         }
+    }
+
+    /**
+     * Исход поиска попадает в тот же «Журнал проверок», что и фоновые проверки цен. Разметку
+     * страницы поиска живьём мы не видим, поэтому «на телефоне пусто» без записи в журнале
+     * превращается в гадание: HTTP это был или WebView, и сколько строк реально разобрано.
+     */
+    private suspend fun logSearchOutcome(query: String, result: SiteSearchResult) {
+        val now = System.currentTimeMillis()
+        val entry = when (result) {
+            is SiteSearchResult.Success -> PriceCheckLog(
+                productId = null,
+                status = PriceCheckLog.STATUS_OK,
+                kind = "SEARCH",
+                source = if (result.viaWebView) "WEBVIEW" else "HTTP",
+                message = "Поиск «${result.query}»: строк ${result.hits.size}",
+                variantsCount = result.hits.size,
+                createdAt = now,
+            )
+
+            is SiteSearchResult.Error -> PriceCheckLog(
+                productId = null,
+                status = PriceCheckLog.STATUS_ERROR,
+                kind = "SEARCH_${result.kind.name}",
+                source = "",
+                message = "Поиск «${query}»: ${result.message}",
+                variantsCount = 0,
+                createdAt = now,
+            )
+        }
+        repository.logCheck(entry)
     }
 
     /**

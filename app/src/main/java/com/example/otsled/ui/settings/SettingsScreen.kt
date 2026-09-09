@@ -184,7 +184,9 @@ private fun CheckLogRow(entry: PriceCheckLog) {
                 text = if (failed) {
                     stringResource(R.string.check_log_error, entry.kind, entry.message.orEmpty())
                 } else {
-                    stringResource(R.string.check_log_ok, entry.variantsCount)
+                    // Сообщение есть не у каждой проверки: у поиска оно и есть весь результат.
+                    entry.message?.takeIf { it.isNotBlank() }
+                        ?: stringResource(R.string.check_log_ok, entry.variantsCount)
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
