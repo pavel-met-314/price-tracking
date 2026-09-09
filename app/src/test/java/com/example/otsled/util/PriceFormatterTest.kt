@@ -15,19 +15,19 @@ class PriceFormatterTest {
     @Test
     fun integerPriceHasNoKopecks() {
         assertEquals("990", PriceFormatter.formatPrice(990.0))
-        assertEquals("4$nbsp990", PriceFormatter.formatPrice(4990.0))
+        assertEquals("4${nbsp}990", PriceFormatter.formatPrice(4990.0))
     }
 
     @Test
     fun thousandsGroupedByNonBreakingSpace() {
-        assertEquals("4$nbsp990", PriceFormatter.formatPrice(4990.0))
+        assertEquals("4${nbsp}990", PriceFormatter.formatPrice(4990.0))
         assertEquals("1${nbsp}234${nbsp}567", PriceFormatter.formatPrice(1234567.0))
     }
 
     @Test
     fun kopecksShownOnlyWhenPresent() {
-        assertEquals("4$nbsp990,50", PriceFormatter.formatPrice(4990.5))
-        assertEquals("4$nbsp990,05", PriceFormatter.formatPrice(4990.05))
+        assertEquals("4${nbsp}990,50", PriceFormatter.formatPrice(4990.5))
+        assertEquals("4${nbsp}990,05", PriceFormatter.formatPrice(4990.05))
     }
 
     @Test
