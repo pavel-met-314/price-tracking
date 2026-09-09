@@ -85,8 +85,10 @@ jobs:
       - name: Locate APK
         if: success()
         run: |
-          files=$(find . -path "*outputs/apk/*" -name "*.apk" | tr '\n' ' ')
+          files=$(find . -name "*.apk" | tr '\n' ' ')
           echo "::notice::APK: ${files:-не найдено}"
+          echo "::notice::outputs: $(ls app/build/outputs 2>&1 | tr '\n' ' ')"
+          echo "::notice::apk-dir: $(ls -R app/build/outputs/apk 2>&1 | tr '\n' ' ')"
 
       - name: Upload APK
         if: success()

@@ -18,14 +18,19 @@ data class CheckOutcome(
     val total: Int,
     val succeeded: Int,
     val retryableFailures: Int,
+    /** Товары, до которых не дошла очередь: цикл упёрся во временной бюджет. */
+    val skippedByBudget: Int = 0,
 ) {
-    val failed: Int get() = total - succeeded
+    val failed: Int get() = total - succeeded - skippedByBudget
 
     /**
      * Повтор имеет смысл, только если не удалось ничего: частичный успех означает, что сайт
      * отвечает, а отдельный товар сломался по своей причине (снят с продажи, удалена страница).
+     * Пропущенные бюджетом товары тоже требуют повтора — иначе они будут ждать следующего
+     * часового интервала без всякой причины.
      */
-    val shouldRetry: Boolean get() = total > 0 && succeeded == 0 && retryableFailures > 0
+    val shouldRetry: Boolean
+        get() = total > 0 && succeeded == 0 && (retryableFailures > 0 || skippedByBudget > 0)
 }
 
 class PriceCheckUseCase(
@@ -37,6 +42,9 @@ class PriceCheckUseCase(
     private companion object {
         /** Отдельный тег, чтобы «цель достигнута» не затиралась уведомлением об изменении цены. */
         const val TARGET_NOTIFICATION_TAG = "target-price"
+
+        /** Сколько разрешено проверять цены в одном фоновом цикле. */
+        const val MAX_CYCLE_MILLIS = 6 * 60_000L
     }
     suspend fun checkProduct(product: TrackedProduct): ParseResult {
         val normalizedUrl = ProductUrlNormalizer.normalize(product.url) ?: product.url
@@ -51,19 +59,41 @@ class PriceCheckUseCase(
         return result
     }
 
+    /**
+     * Прогон по всем товарам с временным бюджетом. WebView-путь может занимать десятки секунд
+     * на товар, и без ограничения один цикл фонового обновления растягивается на полчаса
+     * с включённым экраном и сетью — при большом списке это заметно по батарее.
+     */
     suspend fun checkAllActiveProducts(): CheckOutcome {
         val products = productRepository.getActiveProducts()
+        val deadline = System.currentTimeMillis() + MAX_CYCLE_MILLIS
         var succeeded = 0
         var retryable = 0
+        var skipped = 0
+        var budgetExceeded = false
 
         products.forEach { product ->
+            if (budgetExceeded) {
+                skipped++
+                return@forEach
+            }
+            if (System.currentTimeMillis() > deadline) {
+                budgetExceeded = true
+                skipped++
+                return@forEach
+            }
             when (val result = checkProduct(product)) {
                 is ParseResult.Success -> succeeded++
                 is ParseResult.Error -> if (result.isRetryable) retryable++
             }
         }
 
-        return CheckOutcome(total = products.size, succeeded = succeeded, retryableFailures = retryable)
+        return CheckOutcome(
+            total = products.size,
+            succeeded = succeeded,
+            retryableFailures = retryable,
+            skippedByBudget = skipped,
+        )
     }
 
     private suspend fun handleSuccessfulCheck(

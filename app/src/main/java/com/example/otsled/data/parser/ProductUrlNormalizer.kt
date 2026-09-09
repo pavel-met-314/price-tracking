@@ -18,19 +18,38 @@ object ProductUrlNormalizer {
         "uniseks",
     )
 
-    fun normalize(input: String): String? {
+    private val URL_IN_TEXT_REGEX = Regex("""https?://\S+""", RegexOption.IGNORE_CASE)
+    private val HOST_IN_TEXT_REGEX = Regex("""(?:www\.)?allureparfum\.ru\S*""", RegexOption.IGNORE_CASE)
+
+    /** Символы, которые при вставке из мессенджера прилипают к концу ссылки. */
+    private val TRAILING_NOISE = charArrayOf(',', '.', ')', '(', ';', ':', '!', '?', '"', '\'', '»', '«', '>')
+
+    /**
+     * Ссылка из того, что пользователь вставил в поле. Обычно это не чистый URL, а текст
+     * шаринга: «Посмотри: https://allureparfum.ru/katalog/creed/aventus.html, цена 3000».
+     * Без извлечения получается битый адрес, и товар не заводится вообще.
+     */
+    fun extractUrl(input: String): String? {
         val trimmed = input.trim()
-        if (trimmed.isBlank()) return null
+        if (trimmed.isEmpty()) return null
+
+        val candidate = URL_IN_TEXT_REGEX.find(trimmed)?.value
+            ?: HOST_IN_TEXT_REGEX.find(trimmed)?.value
+            ?: trimmed
+
+        return candidate.trimEnd(*TRAILING_NOISE)
+    }
+
+    fun normalize(input: String): String? {
+        val candidate = extractUrl(input) ?: return null
 
         return when {
-            trimmed.startsWith("http://", ignoreCase = true) ||
-                trimmed.startsWith("https://", ignoreCase = true) -> trimmed
-            trimmed.startsWith("//") -> "https:$trimmed"
-            trimmed.startsWith("/") -> "$BASE$trimmed"
-            trimmed.contains("allureparfum.ru", ignoreCase = true) -> {
-                if (trimmed.startsWith("http", ignoreCase = true)) trimmed else "https://$trimmed"
-            }
-            else -> "$BASE/${trimmed.removePrefix("/")}"
+            candidate.startsWith("http://", ignoreCase = true) ||
+                candidate.startsWith("https://", ignoreCase = true) -> candidate
+            candidate.startsWith("//") -> "https:$candidate"
+            candidate.startsWith("/") -> "$BASE$candidate"
+            candidate.contains("allureparfum.ru", ignoreCase = true) -> "https://${candidate.removePrefix("//")}"
+            else -> "$BASE/${candidate.removePrefix("/")}"
         }
     }
 
@@ -44,7 +63,7 @@ object ProductUrlNormalizer {
 
     fun inferTitleFromUrl(input: String): String? {
         val url = normalize(input) ?: return null
-        val path = URI(url).path?.trim('/') ?: return null
+        val path = runCatching { URI(url).path }.getOrNull()?.trim('/') ?: return null
         val segments = path
             .removeSuffix(".html")
             .removeSuffix(".htm")
