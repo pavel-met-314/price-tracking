@@ -52,7 +52,8 @@ fun ProductDetailScreen(
     )
     val product by viewModel.product.collectAsStateWithLifecycle()
     val variants by viewModel.variants.collectAsStateWithLifecycle()
-    val history by viewModel.history.collectAsStateWithLifecycle()
+    val overview by viewModel.overview.collectAsStateWithLifecycle()
+    val selectedVariantId by viewModel.selectedVariant.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(uiState.deleted) {
@@ -120,6 +121,13 @@ fun ProductDetailScreen(
                     } else {
                         VariantPricesList(variants = variants)
                     }
+                    PriceHistoryCard(
+                        series = overview.series,
+                        variants = variants,
+                        selectedVariantId = selectedVariantId,
+                        onSelectVariant = viewModel::selectVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
                     Button(
                         onClick = viewModel::checkNow,
                         enabled = !uiState.isChecking,
@@ -166,7 +174,7 @@ fun ProductDetailScreen(
                     )
                 }
             }
-            items(history, key = { it.id }) { entry ->
+            items(overview.history, key = { it.id }) { entry ->
                 HistoryRow(entry)
             }
         }

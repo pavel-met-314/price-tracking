@@ -29,6 +29,12 @@ class ProductRepository(
     fun observeLog(limit: Int = LOG_LIMIT): Flow<List<PriceCheckLog>> =
         productDao.observeLog(limit).map { list -> list.map { it.toDomain() } }
 
+    fun observeProductIds(): Flow<List<Long>> = productDao.observeProductIds()
+
+    /** История сразу по всем товарам — для мини-графиков в списке. */
+    fun observeHistoryForProducts(ids: List<Long>): Flow<List<PriceHistoryEntry>> =
+        productDao.observeHistoryForProducts(ids).map { list -> list.map { it.toDomain() } }
+
     suspend fun getActiveProducts(): List<TrackedProduct> =
         productDao.getActiveProducts().map { it.toDomain() }
 

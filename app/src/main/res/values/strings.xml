@@ -48,4 +48,15 @@
     <string name="check_log_ok">Цены получены, вариантов: %1$d</string>
     <string name="check_log_error">%1$s: %2$s</string>
     <string name="reset_parse_session">Забыть состояние анти-бота</string>
+    <string name="price_chart_title">График цены</string>
+    <string name="price_chart_all_volumes">Все объёмы</string>
+    <string name="price_chart_needs_points">Нужно минимум два изменения цены, чтобы построить график. История заполняется по мере фоновых проверок.</string>
+    <string name="price_chart_min">Минимум</string>
+    <string name="price_chart_max">Максимум</string>
+    <string name="price_chart_average">Средняя</string>
+    <string name="price_chart_delta_previous">С прошлой проверки</string>
+    <string name="price_chart_max_value">макс %1$s ₽</string>
+    <string name="price_chart_min_value">мин %1$s ₽</string>
+    <string name="price_chart_truncated">Показаны последние %1$d точек</string>
+    <string name="price_rubles">%1$s ₽</string>
 </resources>

@@ -32,9 +32,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.otsled.R
-import com.example.otsled.domain.model.TrackedProduct
 import com.example.otsled.ui.AppViewModelFactory
 import com.example.otsled.util.DateFormatter
+import com.example.otsled.util.PriceFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,7 +45,7 @@ fun ProductListScreen(
     onOpenProduct: (Long) -> Unit,
 ) {
     val viewModel: ProductListViewModel = viewModel(factory = viewModelFactory)
-    val products by viewModel.products.collectAsStateWithLifecycle()
+    val rows by viewModel.rows.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -64,7 +64,7 @@ fun ProductListScreen(
             }
         },
     ) { padding ->
-        if (products.isEmpty()) {
+        if (rows.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -88,8 +88,8 @@ fun ProductListScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(products, key = { it.id }) { product ->
-                    ProductCard(product = product, onClick = { onOpenProduct(product.id) })
+                items(rows, key = { it.product.id }) { row ->
+                    ProductCard(row = row, onClick = { onOpenProduct(row.product.id) })
                 }
             }
         }
@@ -98,9 +98,10 @@ fun ProductListScreen(
 
 @Composable
 private fun ProductCard(
-    product: TrackedProduct,
+    row: ProductListRow,
     onClick: () -> Unit,
 ) {
+    val product = row.product
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -114,13 +115,21 @@ private fun ProductCard(
                 overflow = TextOverflow.Ellipsis,
             )
             val priceText = product.lastPrice?.let { minPrice ->
-                stringResource(R.string.price_from, formatPrice(minPrice))
+                stringResource(R.string.price_from, PriceFormatter.formatPrice(minPrice))
             } ?: stringResource(R.string.no_price_yet)
             Text(
                 text = priceText,
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(top = 8.dp),
             )
+            // Динамика прямо в списке: ради этого не нужно открывать карточку каждого товара.
+            if (row.points.size >= 2) {
+                PriceSparkline(
+                    points = row.points,
+                    modifier = Modifier.padding(top = 8.dp),
+                    color = priceTrendColor(row.trendDelta ?: 0.0),
+                )
+            }
             // Отдельно про проблему: «цена не менялась» и «мы не смогли получить цену» —
             // для пользователя это разные ситуации, молча показывать старую цену нельзя.
             when {
@@ -139,7 +148,7 @@ private fun ProductCard(
             }
             product.targetPrice?.let { target ->
                 Text(
-                    text = stringResource(R.string.target_price_label, formatPrice(target)),
+                    text = stringResource(R.string.target_price_label, PriceFormatter.formatPrice(target)),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -153,8 +162,4 @@ private fun ProductCard(
             }
         }
     }
-}
-
-private fun formatPrice(price: Double): String {
-    return if (price % 1.0 == 0.0) price.toLong().toString() else price.toString()
 }

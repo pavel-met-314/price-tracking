@@ -88,6 +88,16 @@ interface ProductDao {
     @Query("SELECT * FROM price_history WHERE productId = :productId ORDER BY checkedAt DESC")
     fun observeHistory(productId: Long): Flow<List<PriceHistoryEntryEntity>>
 
+    /**
+     * id нужны отдельным потоком, чтобы список товаров мог подписаться на историю «всех сразу»
+     * одним запросом вместо N подписок: на десятках товаров это заметно по лишний прогонам SQL.
+     */
+    @Query("SELECT id FROM products")
+    fun observeProductIds(): Flow<List<Long>>
+
+    @Query("SELECT * FROM price_history WHERE productId IN (:ids) ORDER BY checkedAt DESC")
+    fun observeHistoryForProducts(ids: List<Long>): Flow<List<PriceHistoryEntryEntity>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertHistory(entry: PriceHistoryEntryEntity): Long
 

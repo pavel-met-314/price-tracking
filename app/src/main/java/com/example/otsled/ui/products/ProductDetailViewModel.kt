@@ -4,14 +4,25 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.otsled.data.parser.ParseResult
 import com.example.otsled.di.AppContainer
+import com.example.otsled.domain.PriceSeries
+import com.example.otsled.domain.buildPriceSeriesFromHistory
 import com.example.otsled.domain.model.PriceHistoryEntry
-import com.example.otsled.domain.model.TrackedProduct
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+/**
+ * График и список истории — один и тот же набор записей, чтобы выбранный объём фильтровал
+ * оба блока одинаково. Иначе цифры под графиком начинают спорить со списком под ним.
+ */
+data class PriceOverview(
+    val series: PriceSeries,
+    val history: List<PriceHistoryEntry>,
+)
 
 data class ProductDetailUiState(
     val isChecking: Boolean = false,
@@ -32,11 +43,30 @@ class ProductDetailViewModel(
     val variants = repository.observeVariants(productId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val history = repository.observeHistory(productId)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val history = repository.observeHistory(productId)
+
+    /** null — обзор по всем объёмам («цена от»), иначе конкретный вариант. */
+    private val selectedVariantId = MutableStateFlow<Long?>(null)
+    val selectedVariant = selectedVariantId.asStateFlow()
+
+    val overview = combine(history, selectedVariantId) { entries, variantId ->
+        val filtered = if (variantId == null) entries else entries.filter { it.variantId == variantId }
+        PriceOverview(
+            series = buildPriceSeriesFromHistory(filtered),
+            history = filtered,
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = PriceOverview(PriceSeries.EMPTY, emptyList()),
+    )
 
     private val _uiState = MutableStateFlow(ProductDetailUiState())
     val uiState = _uiState.asStateFlow()
+
+    fun selectVariant(variantId: Long?) {
+        selectedVariantId.value = variantId
+    }
 
     fun checkNow() {
         val current = product.value ?: return
