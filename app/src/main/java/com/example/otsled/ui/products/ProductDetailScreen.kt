@@ -33,6 +33,7 @@ import com.example.otsled.R
 import com.example.otsled.domain.model.PriceHistoryEntry
 import com.example.otsled.ui.AppViewModelFactory
 import com.example.otsled.util.DateFormatter
+import com.example.otsled.util.PriceFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -97,7 +98,7 @@ fun ProductDetailScreen(
                     Text(text = current.url, style = MaterialTheme.typography.bodySmall)
                     current.targetPrice?.let { target ->
                         Text(
-                            text = stringResource(R.string.target_price_label, formatPrice(target)),
+                            text = stringResource(R.string.target_price_label, PriceFormatter.formatPrice(target)),
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(top = 8.dp),
                         )
@@ -188,7 +189,10 @@ private fun HistoryRow(entry: PriceHistoryEntry) {
             entry.volumeLabel?.let { label ->
                 Text(text = label, style = MaterialTheme.typography.labelMedium)
             }
-            Text(text = "${formatPrice(entry.price)} ₽", style = MaterialTheme.typography.titleSmall)
+            Text(
+                text = stringResource(R.string.price_rubles, PriceFormatter.formatPrice(entry.price)),
+                style = MaterialTheme.typography.titleSmall,
+            )
             Text(
                 text = DateFormatter.format(entry.checkedAt),
                 style = MaterialTheme.typography.bodySmall,
@@ -197,6 +201,3 @@ private fun HistoryRow(entry: PriceHistoryEntry) {
     }
 }
 
-private fun formatPrice(price: Double): String {
-    return if (price % 1.0 == 0.0) price.toLong().toString() else price.toString()
-}

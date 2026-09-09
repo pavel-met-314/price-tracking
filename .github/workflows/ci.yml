@@ -87,6 +87,15 @@ jobs:
           while IFS= read -r line; do
             echo "::error::${line}"
           done < /tmp/errors.trim
+          # Подробности компиляции (список подходящих сигнатур и т. п.) идут после «e:»
+          # без префикса и в аннотации не попадают — собираем их в одну строку.
+          if grep -qE "^e: " "$log"; then
+            grep -A 8 -m 1 -E "^e: " "$log" | tr '\n' ' ' | tr -s ' ' \
+              | sed 's/%/%25/g' | head -c 1500 > /tmp/detail.txt || true
+            if [ -s /tmp/detail.txt ]; then
+              echo "::error::контекст: $(cat /tmp/detail.txt)"
+            fi
+          fi
 
       # Имя файла APK у разных версий AGP различается (app-debug.apk / app_debug.apk),
       # поэтому ищем по дереву outputs и печатаем результат аннотацией.

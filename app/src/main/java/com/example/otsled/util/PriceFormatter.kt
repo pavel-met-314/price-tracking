@@ -20,7 +20,7 @@ object PriceFormatter {
 
         return buildString {
             if (value < 0) append('-')
-            append(groupThousands(rubles))
+            append(groupThousands(rubles.toLong()))
             if (fraction != 0) {
                 append(',')
                 append(fraction.toString().padStart(2, '0'))

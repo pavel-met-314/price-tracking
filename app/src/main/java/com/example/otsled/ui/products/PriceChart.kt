@@ -48,9 +48,10 @@ fun priceTrendColor(delta: Double): Color = when {
 }
 
 /**
- * Линейный график цен на чистом Canvas: рисовать историю уже нечем, а тянуть ради одной
- * диаграммы библиотечный зависимости — лишние 1.5 МБ и ещё один источник несовместимости
- * с Compose. Ось Y нормируется по данным с запасом 12%, чтобы линия не липла к краям карточки.
+ * Линейный график цен на чистом Canvas. Сторонняя chart-библиотека ради одной кривой добавила бы
+ * 1.5 МБ и ещё одну точку несовместимости с Compose, поэтому рисуем сами. Ось Y нормируется по
+ * данным с запасом 12%, чтобы линия не липла к краям карточки, а ось X — по времени записей,
+ * иначе редкие проверки «растягиваются» и недавнее падение выглядит пологим.
  */
 @Composable
 fun PriceChart(
@@ -102,11 +103,14 @@ fun PriceChart(
             moveTo(leftPad, size.height - bottomPad)
             lineTo(size.width - rightPad, size.height - bottomPad)
         }
+        // Штриховка живёт внутри Stroke: у drawPath отдельного pathEffect-параметра нет.
         drawPath(
             path = grid,
             color = gridColor,
-            style = Stroke(width = 1.dp.toPx()),
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 5.dp.toPx())),
+            style = Stroke(
+                width = 1.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 5.dp.toPx())),
+            ),
         )
 
         if (!single) {

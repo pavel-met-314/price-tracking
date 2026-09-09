@@ -9,9 +9,11 @@ import com.example.otsled.domain.model.TrackedProduct
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
+import com.example.otsled.domain.model.PriceHistoryEntry
 
 /** Товар вместе с рядом точек для мини-графика. */
 data class ProductListRow(
@@ -36,7 +38,7 @@ class ProductListViewModel(
      * id товаров — вход для одного запроса истории по всем сразу. `if (isEmpty)` обязателен:
      * Room выдал бы `IN ()`, что невалидный SQL.
      */
-    private val historyFlow = repository.observeProductIds()
+    private val historyFlow: Flow<List<PriceHistoryEntry>> = repository.observeProductIds()
         .flatMapLatest { ids ->
             if (ids.isEmpty()) flowOf(emptyList()) else repository.observeHistoryForProducts(ids)
         }
