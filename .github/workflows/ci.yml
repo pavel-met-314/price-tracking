@@ -23,14 +23,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Runner образы уже содержат Android SDK, но нужного platform/build-tools
-      # может не быть — доставляем явно, иначе сборка падает на compileSdk 36.
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
 
+      # Образ runner'а уже содержит Android SDK; доставляем только то, чего нет,
+      # иначе compileSdk 36 падает на «Failed to find target with hash string».
       - name: Install Android SDK packages
         run: |
           for pkg in "platforms;android-36" "build-tools;36.0.0" "platform-tools"; do
@@ -45,12 +45,43 @@ jobs:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
       - name: Unit tests
-        run: ./gradlew --no-daemon :app:testDebugUnitTest
+        run: ./gradlew --no-daemon :app:testDebugUnitTest 2>&1 | tee /tmp/tests.log
 
       - name: Assemble debug APK
-        run: ./gradlew --no-daemon :app:assembleDebug
+        run: ./gradlew --no-daemon :app:assembleDebug 2>&1 | tee /tmp/assemble.log
+
+      # GitHub отдаёт текст логов только с правом actions:read, а аннотации — нет.
+      # Поэтому ошибки компиляции дублируются аннотациями: их видно в Check Runs API
+      # и в интерфейсе PR, и этого достаточно, чтобы разобрать падение.
+      - name: Publish errors as annotations
+        if: failure()
+        run: |
+          log=""
+          if [ -s /tmp/assemble.log ]; then
+            log=/tmp/assemble.log
+          elif [ -s /tmp/tests.log ]; then
+            log=/tmp/tests.log
+          fi
+          if [ -z "$log" ]; then
+            echo "::error::Сборка упала до запуска Gradle (смотрите лог шагов)"
+            exit 0
+          fi
+          # Отдельный файл вместо конвейера с head: иначе pipefail + SIGPIPE дают
+          # несущественный код 141 и шаг «падает», пряча настоящую причину.
+          grep -E "^e: |^FAILURE:|FAILED|error:|Caused by:|Execution failed" "$log" > /tmp/errors.txt || true
+          if [ ! -s /tmp/errors.txt ]; then
+            echo "::error::Gradle завершился с ошибкой, шаблон не совпал — смотрите полный лог"
+            exit 0
+          fi
+          # Ограничение по байтам, а не по строкам через pipe: head в конвейере
+          # под pipefail обрывает запись с кодом 141 и тонит шаг без причины.
+          head -c 4000 /tmp/errors.txt > /tmp/errors.trim
+          while IFS= read -r line; do
+            echo "::error::${line}"
+          done < /tmp/errors.trim
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: otsled-debug
