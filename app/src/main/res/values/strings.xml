@@ -59,4 +59,16 @@
     <string name="price_chart_min_value">мин %1$s ₽</string>
     <string name="price_chart_truncated">Показаны последние %1$d точек</string>
     <string name="price_rubles">%1$s ₽</string>
+    <string name="search_title">Найти товар на сайте</string>
+    <string name="search_hint">Название или бренд</string>
+    <string name="search_button">Найти</string>
+    <string name="search_progress">Ищем на сайте…</string>
+    <string name="search_empty">Ничего не найдено. Уточните название или вставьте ссылку на товар вручную.</string>
+    <string name="search_found">Найдено строк: %1$d — нажмите, чтобы подставить ссылку и проверить цены</string>
+    <string name="search_via_webview">Сайт отвечал через проверку браузера, поэтому поиск шёл дольше.</string>
+    <string name="search_price">цена %1$s ₽</string>
+    <string name="search_no_price">цена не указана</string>
+    <string name="search_add_action">Добавить</string>
+    <string name="search_clear">Сбросить</string>
+    <string name="product_url_or_search">Ссылка на товар</string>
 </resources>

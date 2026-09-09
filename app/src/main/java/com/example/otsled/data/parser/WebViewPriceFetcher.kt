@@ -24,8 +24,15 @@ data class WebPageContent(
 )
 
 class WebViewPriceFetcher(private val context: Context) {
+    /**
+     * [readyWhen] меняет условие готовности страницы. По умолчанию ждём варианты цен; для
+     * страницы поиска цен нет и ждать их бессмысленно — там достаточно увидеть ссылки на товары.
+     */
     @SuppressLint("SetJavaScriptEnabled")
-    suspend fun fetchContent(rawUrl: String): WebPageContent? {
+    suspend fun fetchContent(
+        rawUrl: String,
+        readyWhen: ((String?) -> Boolean)? = null,
+    ): WebPageContent? {
         val url = ProductUrlNormalizer.normalize(rawUrl) ?: return null
 
         return suspendCancellableCoroutine { continuation ->
@@ -108,9 +115,13 @@ class WebViewPriceFetcher(private val context: Context) {
                         }
                     }
 
-                    if (attempts >= MAX_ATTEMPTS) {
-                        complete()
-                    } else if (bestVariants.size >= 2 && !bestTitle.isNullOrBlank()) {
+                    val ready = if (readyWhen != null) {
+                        readyWhen(bestHtml)
+                    } else {
+                        bestVariants.size >= 2 && !bestTitle.isNullOrBlank()
+                    }
+
+                    if (attempts >= MAX_ATTEMPTS || ready) {
                         complete()
                     } else {
                         handler.postDelayed({ tryExtract() }, RETRY_DELAY_MS)

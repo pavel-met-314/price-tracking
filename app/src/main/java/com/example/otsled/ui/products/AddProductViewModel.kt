@@ -6,6 +6,8 @@ import com.example.otsled.data.parser.ParseResult
 import com.example.otsled.data.parser.PricePageLoader
 import com.example.otsled.data.parser.ParsedProductVariant
 import com.example.otsled.data.parser.ProductUrlNormalizer
+import com.example.otsled.data.site.SiteSearchHit
+import com.example.otsled.data.site.SiteSearchResult
 import com.example.otsled.di.AppContainer
 import com.example.otsled.domain.model.PriceHistoryEntry
 import com.example.otsled.domain.model.TrackedProduct
@@ -24,6 +26,13 @@ data class AddProductUiState(
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
     val saved: Boolean = false,
+    val searchQuery: String = "",
+    val isSearching: Boolean = false,
+    val searchHits: List<SiteSearchHit> = emptyList(),
+    val searchMessage: String? = null,
+    /** true — страницу отдавал WebView: это медленный путь, и пользователю стоит это видеть. */
+    val searchViaWebView: Boolean = false,
+    val hasSearched: Boolean = false,
 )
 
 class AddProductViewModel(
@@ -31,6 +40,7 @@ class AddProductViewModel(
 ) : ViewModel() {
     private val repository = container.productRepository
     private val pricePageLoader = container.pricePageLoader
+    private val siteSearch = container.allureSiteSearch
 
     private val _uiState = MutableStateFlow(AddProductUiState())
     val uiState = _uiState.asStateFlow()
@@ -38,6 +48,66 @@ class AddProductViewModel(
     fun onUrlChange(value: String) {
         _uiState.update { it.copy(url = value, errorMessage = null) }
     }
+
+    fun onSearchQueryChange(value: String) {
+        _uiState.update { it.copy(searchQuery = value, searchMessage = null) }
+    }
+
+    fun clearSearch() {
+        _uiState.update {
+            it.copy(searchQuery = "", searchHits = emptyList(), searchMessage = null, searchViaWebView = false)
+        }
+    }
+
+    /**
+     * Поиск по названию. Ошибкой считаем только ситуацию, когда страница не ответила вообще:
+     * пустая выдача — нормальный результат («такого товара нет»), иначе пользователь видел бы
+     * «ошибку» там, где просто нет совпадений.
+     */
+    fun runSearch() {
+        val query = _uiState.value.searchQuery.trim()
+        if (query.isEmpty()) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSearching = true, searchMessage = null, searchHits = emptyList()) }
+            val result = siteSearch.search(query)
+            _uiState.update { state ->
+                when (result) {
+                    is SiteSearchResult.Success -> state.copy(
+                        isSearching = false,
+                        hasSearched = true,
+                        searchHits = result.hits,
+                        searchViaWebView = result.viaWebView,
+                        searchMessage = null,
+                    )
+                    is SiteSearchResult.Error -> state.copy(
+                        isSearching = false,
+                        hasSearched = true,
+                        searchHits = emptyList(),
+                        searchViaWebView = false,
+                        searchMessage = result.message,
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Выбор строки поиска: подставляем ссылку и сразу зовём проверку, чтобы до сохранения
+     * человек видел цены по объёмам, а не «купил» вслепую.
+     */
+    fun useSearchHit(hit: SiteSearchHit) {
+        _uiState.update {
+            it.copy(
+                url = hit.url,
+                title = hit.title,
+                errorMessage = null,
+                parsedVariants = emptyList(),
+            )
+        }
+        checkNow()
+    }
+
 
     fun onTargetPriceChange(value: String) {
         _uiState.update { it.copy(targetPrice = value, errorMessage = null) }

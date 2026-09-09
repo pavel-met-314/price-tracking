@@ -6,6 +6,7 @@ import com.example.otsled.data.parser.AllureParfumPriceParser
 import com.example.otsled.data.parser.PricePageLoader
 import com.example.otsled.data.parser.WebViewPriceFetcher
 import com.example.otsled.data.repository.ProductRepository
+import com.example.otsled.data.site.AllureSiteSearch
 import com.example.otsled.data.settings.ParseSessionStore
 import com.example.otsled.data.settings.SettingsRepository
 import com.example.otsled.domain.PriceCheckUseCase
@@ -50,6 +51,14 @@ class AppContainer(context: Context) {
     val pricePageLoader: PricePageLoader by lazy {
         PricePageLoader(
             parser = priceParser,
+            webViewFetcher = webViewPriceFetcher,
+            sessionStore = parseSessionStore,
+        )
+    }
+
+    val allureSiteSearch: AllureSiteSearch by lazy {
+        AllureSiteSearch(
+            context = applicationContext,
             webViewFetcher = webViewPriceFetcher,
             sessionStore = parseSessionStore,
         )
