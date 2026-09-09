@@ -166,4 +166,42 @@ class SiteSearchQueryTest {
         assertTrue(SiteSearchQuery.extractHits(null, "ganymede").isEmpty())
         assertTrue(SiteSearchQuery.extractHits("<html><body>нет товаров</body></html>", "ganymede").isEmpty())
     }
+
+    @Test
+    fun `header-only page is not ready for extraction`() {
+        // Первый кадр страницы: отрисована шапка, результатов ещё нет. Если принять её за готовую,
+        // поиск отдаст «ничего не найдено» там, где страница просто не дорисовалась.
+        val html = """
+            <html><head><script src="https://api-site.com/captcha.js"></script></head>
+            <body><div>0 Мои желания Вход / Регистрация Главная Бренды Доставка Оплата</div></body></html>
+        """.trimIndent()
+        assertFalse(SiteSearchQuery.isReadyForExtraction(html))
+    }
+
+    @Test
+    fun `page with product links is ready for extraction`() {
+        val html = """
+            <html><body>
+            <a href="/katalog/na_muzhchinye-arekate/ganymede-deo-parfum-76734.html">Ganymede</a>
+            </body></html>
+        """.trimIndent()
+        assertTrue(SiteSearchQuery.isReadyForExtraction(html))
+    }
+
+    @Test
+    fun `search verdict without results counts as ready`() {
+        val html = "<html><body><h1>Поиск: ничего не найдено</h1></body></html>"
+        assertTrue(SiteSearchQuery.isReadyForExtraction(html))
+    }
+
+    @Test
+    fun `blank and challenge pages are not ready`() {
+        assertFalse(SiteSearchQuery.isReadyForExtraction(null))
+        assertFalse(SiteSearchQuery.isReadyForExtraction("   "))
+        val stub = """
+            <html><head><title>Доступ ограничен</title></head>
+            <body><p>Check <b>captcha</b> field.</p></body></html>
+        """.trimIndent()
+        assertFalse(SiteSearchQuery.isReadyForExtraction(stub))
+    }
 }

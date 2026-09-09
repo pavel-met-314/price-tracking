@@ -1,5 +1,6 @@
 package com.example.otsled.data.site
 
+import com.example.otsled.data.parser.BotProtection
 import com.example.otsled.data.parser.PriceNormalizer
 import com.example.otsled.data.parser.ProductUrlNormalizer
 import org.jsoup.Jsoup
@@ -69,6 +70,12 @@ object SiteSearchQuery {
     private val VOLUME_REGEX = Regex("""(\d+(?:[.,]\d+)?)\s*мл\.?""", RegexOption.IGNORE_CASE)
     private val WHITESPACE_REGEX = Regex("""\s+""")
     private val RESULT_BLOCK_REGEX = Regex("""(search|result|offer|item|product|card)""", RegexOption.IGNORE_CASE)
+    /** Вердикт страницы поиска без результатов: ждать появления товаров бессмысленно. */
+    private val SEARCH_VERDICT_REGEX = Regex(
+        "(ничего не найдено|нет результатов|поиск не дал|совпадений не найдено|nothing found)",
+        RegexOption.IGNORE_CASE,
+    )
+
     private val CHROME_TAGS = setOf("header", "footer", "nav", "aside")
 
     fun searchUrl(query: String): String {
@@ -85,6 +92,18 @@ object SiteSearchQuery {
      * Сколько ссылок на товары видно в разметке. Нужен не для разбора, а для журнала: «0 ссылок»
      * и «страница-заглушка» — это разные поломки, и без счётчика их не отличить на расстоянии.
      */
+    /**
+     * Готова ли страница к разбору. Первый кадр страницы поиска — часто только шапка сайта
+     * («Мои желания», «Вход / Регистрация», меню разделов). Если остановиться на ней, ссылок на
+     * товары в разметке не будет, и поиск объявит блокировку там, где страница просто не
+     * дорисовалась. Поэтому ждём либо ссылки на товары, либо явный вердикт поиска.
+     */
+    fun isReadyForExtraction(html: String?): Boolean {
+        if (html.isNullOrBlank() || BotProtection.isChallengeHtml(html)) return false
+        val lower = html.lowercase()
+        return PRODUCT_HREF_REGEX.containsMatchIn(lower) || SEARCH_VERDICT_REGEX.containsMatchIn(lower)
+    }
+
     fun countProductLinks(html: String?): Int {
         if (html.isNullOrBlank()) return 0
         return PRODUCT_HREF_REGEX.findAll(html).count()

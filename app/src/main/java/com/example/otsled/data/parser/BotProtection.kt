@@ -30,9 +30,17 @@ object BotProtection {
         "доступ ограничен",
     )
 
-    /** Признаки того, что короткая страница без цен — именно заглушка, а не битый ответ. */
+    /**
+     * Признаки того, что короткая страница без цен — именно заглушка, а не битый ответ. Только
+     * однозначные обороты: слова «browser», «javascript» и «security» встречаются в разметке любой
+     * живой страницы (теги скриптов, meta viewport), и с ними половина живых страниц объявлялась блокировкой.
+     */
     private val CHALLENGE_HINT_REGEX = Regex(
-        "(проверк|верификац|web-browser|webbrowser|browser|javascript|challenge|security)",
+        "(проверк|верификац|web-?browser-?verification|just a moment|checking your browser|" +
+            "access denied|attention required|unusual traffic|human verification|cloudflare|" +
+            "ddos-guard|captcha|\\u043d\\u0435 \\u0440\\u043e\\u0431\\u043e\\u0442|" +
+            "\\u0434\\u043e\\u0441\\u0442\\u0443\\u043f \\u043e\\u0433\\u0440\\u0430\\u043d\\u0438\\u0447|" +
+            "\\u0437\\u0430\\u043f\\u0440\\u043e\\u0441 \\u043e\\u0442\\u043a\\u043b\\u043e\\u043d)",
         RegexOption.IGNORE_CASE,
     )
 
@@ -44,16 +52,54 @@ object BotProtection {
     /** Максимальная длина «заглушки»: настоящая страница товара вместе со скриптами всегда длиннее. */
     private const val STUB_HTML_LIMIT = 40_000
 
+    /**
+     * Предел «совсем короткой» страницы: меньше весит только обложка проверки браузера. Нужно для
+     * случая «маркер есть и признаки контента есть» — живая страница выдачи десятки килобайт,
+     * а заглушка, завёрнутая в шаблон сайта, остаётся крошечной.
+     */
+    private const val TINY_PAGE_LIMIT = 3_000
+
+    /**
+     * Страница получена настоящая: любой из этих маркеров означает, что контент на месте.
+     * Заглушка анти-бота ссылок на разделы, цен и формы поиска не содержит вообще.
+     */
+    private val REAL_CONTENT_MARKERS = listOf(
+        "/katalog/",
+        "/brend/",
+        "s_search",
+        "результат",
+        "ничего не найдено",
+        "руб",
+        "\u20bd",
+        " мл",
+        "корзин",
+        "заказ",
+    )
+
+    /**
+     * true — если вместо страницы была заглушка анти-бота.
+     *
+     * Раньше достаточно было одного маркера, и это ломало разбор реальных страниц: на странице
+     * поиска есть скрипт со словом «captcha» и упоминанием «browser», а цен там по определению нет
+     * — живая проверка на телефоне показывала «сайт запросил проверку браузера» там, где страница
+     * загрузилась нормально (в выжимке было видно меню сайта). Теперь контент перевешивает маркер:
+     * блокировкой считаем только страницу без какого-либо содержимого либо совсем короткую.
+     *
+     * Пустая страница — не заглушка, а отсутствие ответа: её ловят вызывающие стороны, потому что
+     * «заглушка» требует от пользователя действий, а пустой ответ — повтора.
+     */
     fun isChallengeHtml(html: String?): Boolean {
         if (html.isNullOrBlank()) return false
         val lower = html.lowercase()
-        if (CHALLENGE_MARKERS.any { lower.contains(it) }) return true
+        val markerHit = CHALLENGE_MARKERS.any { lower.contains(it) }
+        val realContent = REAL_CONTENT_MARKERS.any { lower.contains(it) }
 
-        // Комбинация: страница короткая, цен нет, объёмов нет, но есть слова про проверку браузера.
-        val looksLikeProductPage = lower.contains("руб") || lower.contains("₽") || lower.contains("мл")
-        return lower.length < STUB_HTML_LIMIT &&
-            !looksLikeProductPage &&
-            CHALLENGE_HINT_REGEX.containsMatchIn(lower)
+        if (realContent) return markerHit && lower.length < TINY_PAGE_LIMIT
+
+        if (markerHit) return true
+
+        // Комбинация: страница короткая, содержимого нет, но есть слова про проверку браузера.
+        return lower.length < STUB_HTML_LIMIT && CHALLENGE_HINT_REGEX.containsMatchIn(lower)
     }
 
     /**

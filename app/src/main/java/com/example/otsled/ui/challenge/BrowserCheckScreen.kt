@@ -44,8 +44,10 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
 /**
- * Экран «пройти проверку браузера руками». Единственное место, где анти-бот видит обычный
- * интерактивный WebView: автотест проходит сам, капчу — только человек.
+ * Экран «пройти проверку браузера руками». Фоновый WebView создаётся без окна: автотест сайта
+ * он проходит, капчу или кнопку «я не робот» — нет. Единственный честный способ пустить человека —
+ * показать страницу ему. Куки при этом общие ([CookieManager]), поэтому пройденная здесь проверка
+ * возвращает к жизни и поиск, и фоновые проверки цен.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,15 +63,17 @@ fun BrowserCheckScreen(
 
     LaunchedEffect(webView) {
         val view = webView ?: return@LaunchedEffect
-        // 40 секунд наблюдения: проверка сайта разворачивается сама, и обычно хватает 3–5 секунд.
-        repeat(POLL_TIMES) {
+        // 40 секунд наблюдения: проверка сайта разворачивается сама, обычно хватает 3–5 секунд.
+        var ticks = 0
+        while (ticks < POLL_TIMES) {
             val probe = view.probe()
-            viewModel.onPageText(probe.summary)
+            probe.summary?.let(viewModel::onPageText)
             if (probe.passed) {
                 viewModel.markPassed()
-                return@repeat
+                break
             }
             delay(POLL_DELAY_MS)
+            ticks++
         }
     }
 
@@ -118,23 +122,18 @@ fun BrowserCheckScreen(
                     if (passed) R.string.browser_check_status_passed else R.string.browser_check_status_waiting,
                 ),
                 style = MaterialTheme.typography.labelMedium,
-                color = if (passed) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.error
-                },
+                color = if (passed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                 modifier = Modifier.padding(top = 6.dp),
             )
-            pageSummary?.let { summary ->
-                // Тот самый текст, который просят прислать: чем страница отличается от каталога.
-                SelectionContainer {
-                    Text(
-                        text = summary,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
-                }
+            // Что реально отдаёт страница — тот самый текст, который просят прислать при
+            // «на телефоне пусто». Выделяется долгим тапом, чтобы его можно было скопировать.
+            SelectionContainer {
+                Text(
+                    text = pageSummary ?: stringResource(R.string.browser_check_waiting_page),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
             }
 
             BrowserWebView(
@@ -148,13 +147,17 @@ fun BrowserCheckScreen(
     }
 
     DisposableEffect(webView) {
+        // Значение читаем здесь, а не в onDispose: эффект с ключом «null» вызывается и тогда,
+        // когда WebView только что создали, — чтение состояния в onDispose уничтожало живой
+        // WebView, и экран оставался белым.
+        val view = webView
         onDispose {
-            webView?.let { view ->
+            if (view != null) {
                 // Без flush куки могут остаться в памяти WebView и не достаться OkHttp-пути.
                 runCatching { CookieManager.getInstance().flush() }
+                runCatching { view.stopLoading() }
                 runCatching { view.destroy() }
             }
-            webView = null
         }
     }
 }
@@ -169,8 +172,8 @@ private fun BrowserWebView(modifier: Modifier = Modifier, onReady: (WebView) -> 
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
                 settings.userAgentString = AllureParfumPriceParser.USER_AGENT
-                // Отладка через chrome://inspect: иначе «что сайт отдал на самом деле» можно
-                // только угадывать по логам.
+                // Отладка через chrome://inspect: иначе «что сайт отдал на самом деле» можно только
+                // угадывать по логам.
                 if (isDebuggable(context)) {
                     runCatching { WebView.setWebContentsDebuggingEnabled(true) }
                 }
@@ -188,30 +191,37 @@ private fun BrowserWebView(modifier: Modifier = Modifier, onReady: (WebView) -> 
 private class PageProbe(val passed: Boolean, val summary: String?)
 
 /**
- * Один опрос состояния страницы. Возвращается плоская строка, а не JSON: её формат задаёт не
- * сайт, и возиться с экранированием кавычек из чужого текста незачем — небезопасные символы
- * вырезаются ещё в JavaScript.
+ * Один опрос состояния страницы. Возвращается плоская строка, а не JSON: её формат задаёт не сайт,
+ * и возиться с экранированием чужого текста незачем — небезопасные символы вырезаются в JS.
  */
 private suspend fun WebView.probe(): PageProbe = suspendCancellableCoroutine { continuation ->
-    evaluateJavascript(PROBE_JS) { raw ->
+    // Корутина снимается вместе с экраном, а колбэк WebView приходит позже: resume по снятому
+    // продолжению уронил бы приложение, поэтому каждое возобновление под проверкой isActive.
+    fun reply(probe: PageProbe) {
+        if (continuation.isActive) continuation.resume(probe)
+    }
+
+    val callback: (String?) -> Unit = { raw ->
         val parts = raw.orEmpty().trim('"').split('|')
         if (parts.size < 5) {
-            continuation.resume(PageProbe(passed = false, summary = null))
-            return@evaluateJavascript
+            reply(PageProbe(passed = false, summary = null))
+        } else {
+            val state = parts[0]
+            val textLength = parts[1].toIntOrNull() ?: 0
+            val links = parts[2].toIntOrNull() ?: 0
+            val challenged = parts[3] == "1"
+            val head = parts[4]
+            // Каталог открыт: документ загружен, проверка не мешает, и либо есть ссылки на товары,
+            // либо текста достаточно много, чтобы это была настоящая страница.
+            val done = state == "complete" && !challenged && (links > 0 || textLength > 6_000)
+            val summary = "состояние: $state, текста: $textLength, ссылок на товары: $links" +
+                if (head.isNotBlank()) ", начало страницы: «$head»" else ""
+            reply(PageProbe(passed = done, summary = summary))
         }
-        val state = parts[0]
-        val textLength = parts[1].toIntOrNull() ?: 0
-        val links = parts[2].toIntOrNull() ?: 0
-        val challenged = parts[3] == "1"
-        val head = parts[4]
-        // Каталог открыт: страница дополнена, проверка браузера не мешает, и либо есть ссылки
-        // на товары, либо текста достаточно много, чтобы это была настоящая страница.
-        val passed = state == "complete" && !challenged && (links > 0 || textLength > 6_000)
-        val summary = "состояние: $state, текста: $textLength, ссылок на товары: $links" +
-            if (head.isNotBlank()) ", начало страницы: «$head»" else ""
-        continuation.resume(PageProbe(passed = passed, summary = summary))
     }
-    continuation.invokeOnCancellation { }
+    // Вызов может не удаться, если WebView уже уничтожен: иначе корутина осталась бы висеть.
+    runCatching { evaluateJavascript(PROBE_JS, callback) }
+        .onFailure { reply(PageProbe(passed = false, summary = null)) }
 }
 
 private fun isDebuggable(context: Context): Boolean =

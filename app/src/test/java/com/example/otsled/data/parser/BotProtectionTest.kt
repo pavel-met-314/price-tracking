@@ -1,6 +1,7 @@
 package com.example.otsled.data.parser
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -48,5 +49,33 @@ class BotProtectionTest {
     fun challengeDetectionStillWorks() {
         assertTrue(BotProtection.isChallengeHtml("<html><body>Выполняется проверка вашего браузера</body></html>"))
         assertTrue(BotProtection.stubSummary("<body>captcha: подтвердите</body>")!!.contains("captcha"))
+    }
+
+    @Test
+    fun `page with catalog links is not a challenge even when captcha script present`() {
+        // Живой случай с телефона: страница поиска содержит ссылку на каталог и текст меню,
+        // а «captcha» в ней — только имя стороннего скрипта. Значит, страница настоящая.
+        val html = """
+            <html><head><script src="https://api-site.com/captcha.js"></script></head>
+            <body>
+            <div>0 Мои желания Самая большая коллекция пробников Вход / Регистрация</div>
+            <a href="/katalog/na_muzhchinye-arekate-123.html">Ganymede</a>
+            """ + "x".repeat(7_000) + """
+            </body></html>
+        """.trimIndent()
+        assertFalse(BotProtection.isChallengeHtml(html))
+    }
+
+    @Test
+    fun `tiny page with marker is a challenge despite product link`() {
+        // Подозрительная страница в несколько строк — это обёртка заглушки, а не выдача каталога.
+        val html = """<html><body><p>Обнаружена капча. <a href="/katalog/x.html">?</a></p></body></html>"""
+        assertTrue(BotProtection.isChallengeHtml(html))
+    }
+
+    @Test
+    fun `stub summary of header-only page shows menu text`() {
+        val html = "<html><body class=\"b-catalog\"><div>0 Мои желания Главная Бренды</div></body></html>"
+        assertEquals("0 Мои желания Главная Бренды", BotProtection.stubSummary(html))
     }
 }

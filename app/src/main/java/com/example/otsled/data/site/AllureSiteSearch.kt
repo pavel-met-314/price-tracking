@@ -76,7 +76,7 @@ class AllureSiteSearch(
         for (attempt in 1..WEBVIEW_ATTEMPTS) {
             val content = webViewFetcher.fetchContent(
                 rawUrl = url,
-                readyWhen = { html -> !html.isNullOrBlank() },
+                readyWhen = { html -> SiteSearchQuery.isReadyForExtraction(html) },
             )
             lastHtml = content?.html
             loadFailed = content?.loadFailed == true
@@ -103,9 +103,9 @@ class AllureSiteSearch(
                 )
             }
 
-            // bestHtml заполняется только на «не-заглушке»: непустая страница означает, что она
-            // отрисована, и второй заход ничего не изменит.
-            if (!lastHtml.isNullOrBlank() || attempt == WEBVIEW_ATTEMPTS) break
+            // Если страница отрисована и готова к разбору, но строк нет — второй заход ничего не
+            // изменит; если же мы получили полустаницу (только шапку), одна пауза и повтор решают.
+            if (SiteSearchQuery.isReadyForExtraction(lastHtml) || attempt == WEBVIEW_ATTEMPTS) break
             delay(WEBVIEW_RETRY_DELAY_MS)
         }
 
@@ -125,20 +125,29 @@ class AllureSiteSearch(
         }
 
         val summary = notes.summary()
+        val parsed = SiteSearchQuery.isReadyForExtraction(lastHtml)
         when {
             // Страница реальная и ссылки на товары в ней есть, а строк нет — это наш разбор не
             // совпал с выдачей, а не «совпадений нет».
-            !lastHtml.isNullOrBlank() && links > 0 -> SiteSearchResult.Error(
+            parsed && links > 0 -> SiteSearchResult.Error(
                 PARSE_HINT,
                 SiteSearchResult.Kind.PARSE,
                 note = summary,
             )
 
-            // Страница реальная, ссылок нет — честно «не найдено».
-            !lastHtml.isNullOrBlank() -> SiteSearchResult.Success(
+            // Страница готова и ссылок нет — честно «не найдено».
+            parsed -> SiteSearchResult.Success(
                 query = normalizedQuery,
                 hits = emptyList(),
                 viaWebView = true,
+                note = summary,
+            )
+
+            // Полустраница (одна шапка) — это не «не найдено» и не блокировка: не дождались.
+            // Ошибка помечается повторяемой, чтобы кнопка «Повторить поиск» осталась на экране.
+            !lastHtml.isNullOrBlank() -> SiteSearchResult.Error(
+                NOT_WAITED_HINT,
+                if (challengeSeen) SiteSearchResult.Kind.BOT_CHALLENGE else SiteSearchResult.Kind.NETWORK,
                 note = summary,
             )
 
@@ -278,6 +287,10 @@ class AllureSiteSearch(
             "На сайте нет страницы поиска (HTTP 404) — вставьте ссылку на товар вручную"
         const val PARSE_HINT =
             "Страницу поиска получили, но строк в ней не увидели: похоже, выдача изменилась"
+
+        /** Полустраница: повтор имеет смысл, обычно помогает второй заход после прогрева. */
+        const val NOT_WAITED_HINT =
+            "Страница поиска загрузилась не полностью — попробуйте повторить через минуту"
 
         /** Подсказка осмысленная: проверка любого товара по ссылке прогревает те же куки. */
         const val CHALLENGE_HINT =

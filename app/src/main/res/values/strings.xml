@@ -78,5 +78,6 @@
     <string name="browser_check_status_waiting">Страница пока закрыта проверкой…</string>
     <string name="browser_check_status_passed">Похоже, сайт пустил — можно возвращаться.</string>
     <string name="browser_check_done">Готово, вернуться</string>
+    <string name="browser_check_waiting_page">Читаем страницу…</string>
     <string name="browser_check_reset">Сбросить состояние проверки</string>
 </resources>
