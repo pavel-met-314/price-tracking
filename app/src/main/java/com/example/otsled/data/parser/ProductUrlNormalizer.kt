@@ -18,8 +18,8 @@ object ProductUrlNormalizer {
         "uniseks",
     )
 
-    private val URL_IN_TEXT_REGEX = Regex("""https?://\S+""", RegexOption.IGNORE_CASE)
-    private val HOST_IN_TEXT_REGEX = Regex("""(?:www\.)?allureparfum\.ru\S*""", RegexOption.IGNORE_CASE)
+    private val URL_IN_TEXT_REGEX = Regex("""https?://\S+""", setOf(RegexOption.IGNORE_CASE, RegexOption.UNICODE_CASE))
+    private val HOST_IN_TEXT_REGEX = Regex("""(?:www\.)?allureparfum\.ru\S*""", setOf(RegexOption.IGNORE_CASE, RegexOption.UNICODE_CASE))
 
     /** Символы, которые при вставке из мессенджера прилипают к концу ссылки. */
     private val TRAILING_NOISE = charArrayOf(',', '.', ')', '(', ';', ':', '!', '?', '"', '\'', '»', '«', '>')

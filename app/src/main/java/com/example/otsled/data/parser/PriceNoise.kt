@@ -36,7 +36,7 @@ object PriceNoise {
     /** «Цена за 1 мл: 213 руб.» — объём тут служебный, а не вариант товара. */
     private val PRICE_PER_ML_REGEX = Regex(
         "(за\\s*1\\s*мл|цена\\s*за\\s*мл|₽\\s*[/\\s]\\s*мл|руб\\s*[/\\s]\\s*мл|за\\s*миллилитр)",
-        RegexOption.IGNORE_CASE,
+        setOf(RegexOption.IGNORE_CASE, RegexOption.UNICODE_CASE),
     )
 
     fun isPricePerMl(text: String?): Boolean {
@@ -46,12 +46,12 @@ object PriceNoise {
 
     private val PER_ML_WITH_PRICE_REGEX = Regex(
         "за\\s*1?\\s*мл[^0-9]{0,12}\\d[\\d\\s\\u00A0]{0,10}\\s*(?:руб|₽)",
-        RegexOption.IGNORE_CASE,
+        setOf(RegexOption.IGNORE_CASE, RegexOption.UNICODE_CASE),
     )
 
     private val PER_ML_SUFFIX_REGEX = Regex(
         "\\d[\\d\\s.,\\u00A0]{0,10}\\s*(?:₽|руб\\.?)\\s*/\\s*мл",
-        RegexOption.IGNORE_CASE,
+        setOf(RegexOption.IGNORE_CASE, RegexOption.UNICODE_CASE),
     )
 
     /**

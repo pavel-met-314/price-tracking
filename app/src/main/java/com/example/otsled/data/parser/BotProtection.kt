@@ -42,7 +42,7 @@ object BotProtection {
             "ddos-guard|captcha|\\u043d\\u0435 \\u0440\\u043e\\u0431\\u043e\\u0442|" +
             "\\u0434\\u043e\\u0441\\u0442\\u0443\\u043f \\u043e\\u0433\\u0440\\u0430\\u043d\\u0438\\u0447|" +
             "\\u0437\\u0430\\u043f\\u0440\\u043e\\u0441 \\u043e\\u0442\\u043a\\u043b\\u043e\\u043d)",
-        RegexOption.IGNORE_CASE,
+        setOf(RegexOption.IGNORE_CASE, RegexOption.UNICODE_CASE),
     )
 
     private val SCRIPT_BLOCK_REGEX = Regex("(?is)<script[^>]*>.*?</script>")
