@@ -97,6 +97,36 @@ jobs:
             fi
           fi
 
+      # Диагностика проваленных тестов: Gradle не печатает сообщение утверждения в консоли,
+      # а оно лежит в XML-отчёте. Выводим его аннотациями — их видно через Check Runs API,
+      # когда доступ к логам артефактов с машины разработчика недоступен.
+      - name: Publish test failure details
+        if: always()
+        run: |
+          files=$(find app/build/test-results -name "*.xml" 2>/dev/null | tr '\n' ' ')
+          if [ -z "$files" ]; then
+            exit 0
+          fi
+          python3 - $files <<'PY' > /tmp/fails.txt || true
+          import html, re, sys
+
+          for path in sys.argv[1:]:
+              src = open(path, encoding="utf-8", errors="replace").read()
+              for name, body in re.findall(r'<testcase name="([^"]+)"[^>]*>(.*?)</testcase>', src, re.S):
+                  m = re.search(r'<failure[^>]*message="([^"]*)"', body)
+                  if not m:
+                      continue
+                  text = html.unescape(m.group(1)).replace("\n", " | ")
+                  print(name + " => " + text[:450])
+          PY
+          if [ ! -s /tmp/fails.txt ]; then
+            exit 0
+          fi
+          sed 's/%/%25/g' /tmp/fails.txt > /tmp/fails.esc
+          while IFS= read -r line; do
+            echo "::error::${line}"
+          done < /tmp/fails.esc
+
       # Имя файла APK у разных версий AGP различается (app-debug.apk / app_debug.apk),
       # поэтому ищем по дереву outputs и печатаем результат аннотацией.
       - name: Locate APK
