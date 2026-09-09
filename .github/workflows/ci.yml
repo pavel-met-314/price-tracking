@@ -95,10 +95,7 @@ jobs:
         run: |
           set +e
           files=$(find . -name "*.apk" -not -path "./.git/*" | tr '\n' ' ')
-          echo "::notice::APK: ${files:-не найдено}"
-          echo "::notice::build: $(ls app/build 2>&1 | tr '\n' ' ')"
-          echo "::notice::pack: $(grep -oE 'Task :app:(package|validate|zip|assemble|createDebugApk|buildDebugApk)[A-Za-z]*' /tmp/assemble.log | sort -u | tr '\n' ' ')"
-          echo "::notice::tail: $(tail -c 420 /tmp/assemble.log | tr '\n' '|')"
+          echo "::notice::APK: ${files:-не найден — сборка прошла, но упаковка не создала файл}"
 
       - name: Upload APK
         if: success()
