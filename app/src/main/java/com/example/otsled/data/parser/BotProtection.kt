@@ -26,6 +26,7 @@ object BotProtection {
         "ddos-guard",
         "qrux",
         "captcha",
+        "капч",
         "access denied",
         "доступ ограничен",
     )
