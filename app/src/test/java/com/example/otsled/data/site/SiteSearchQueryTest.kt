@@ -124,6 +124,14 @@ class SiteSearchQueryTest {
     }
 
     @Test
+    fun productLinksAreCountedForDiagnostics() {
+        // Счётчик сырой: он считает ссылки в разметке, а «меню/подвал» отсекает уже разбор строк.
+        assertEquals(6, SiteSearchQuery.countProductLinks(searchResultsHtml))
+        assertEquals(0, SiteSearchQuery.countProductLinks("<html><body><a href=\"/brend/x/\">x</a></body></html>"))
+        assertEquals(0, SiteSearchQuery.countProductLinks(null))
+    }
+
+    @Test
     fun challengePageHasNothingToParse() {
         val html = """
             <html><head><title>Проверка браузера</title></head><body>
@@ -133,14 +141,7 @@ class SiteSearchQueryTest {
 
         assertTrue(BotProtection.isChallengeHtml(html))
         assertTrue(SiteSearchQuery.extractHits(html, "ganymede").isEmpty())
-        assertFalse(SiteSearchQuery.hasProductLinks(html))
-    }
-
-    @Test
-    fun readyForWebViewMeansProductLinksPresent() {
-        assertTrue(SiteSearchQuery.hasProductLinks(searchResultsHtml))
-        assertFalse(SiteSearchQuery.hasProductLinks(null))
-        assertFalse(SiteSearchQuery.hasProductLinks("   "))
+        assertEquals(0, SiteSearchQuery.countProductLinks(html))
     }
 
     @Test

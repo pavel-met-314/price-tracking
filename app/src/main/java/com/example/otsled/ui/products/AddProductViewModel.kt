@@ -34,6 +34,10 @@ data class AddProductUiState(
     /** true — страницу отдавал WebView: это медленный путь, и пользователю стоит это видеть. */
     val searchViaWebView: Boolean = false,
     val hasSearched: Boolean = false,
+    /** Диагноз разбора (что пробовали и что получили). Именно его просят прислать при «пусто на телефоне». */
+    val searchNote: String? = null,
+    /** true — ошибка временная (проверка браузера или сеть), имеет смысл нажать «Повторить». */
+    val searchRetryable: Boolean = false,
 )
 
 class AddProductViewModel(
@@ -70,7 +74,15 @@ class AddProductViewModel(
         if (query.isEmpty()) return
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isSearching = true, searchMessage = null, searchHits = emptyList()) }
+            _uiState.update {
+                it.copy(
+                    isSearching = true,
+                    searchMessage = null,
+                    searchHits = emptyList(),
+                    searchNote = null,
+                    searchRetryable = false,
+                )
+            }
             val result = siteSearch.search(query)
             logSearchOutcome(query, result)
             _uiState.update { state ->
@@ -81,6 +93,8 @@ class AddProductViewModel(
                         searchHits = result.hits,
                         searchViaWebView = result.viaWebView,
                         searchMessage = null,
+                        searchNote = result.note,
+                        searchRetryable = false,
                     )
                     is SiteSearchResult.Error -> state.copy(
                         isSearching = false,
@@ -88,6 +102,9 @@ class AddProductViewModel(
                         searchHits = emptyList(),
                         searchViaWebView = false,
                         searchMessage = result.message,
+                        searchNote = result.note,
+                        searchRetryable = result.kind == SiteSearchResult.Kind.BOT_CHALLENGE ||
+                            result.kind == SiteSearchResult.Kind.NETWORK,
                     )
                 }
             }
@@ -107,7 +124,7 @@ class AddProductViewModel(
                 status = PriceCheckLog.STATUS_OK,
                 kind = "SEARCH",
                 source = if (result.viaWebView) "WEBVIEW" else "HTTP",
-                message = "Поиск «${result.query}»: строк ${result.hits.size}",
+                message = "Поиск «${result.query}»: строк ${result.hits.size}" + result.noteSuffix(),
                 variantsCount = result.hits.size,
                 createdAt = now,
             )
@@ -117,12 +134,24 @@ class AddProductViewModel(
                 status = PriceCheckLog.STATUS_ERROR,
                 kind = "SEARCH_${result.kind.name}",
                 source = "",
-                message = "Поиск «${query}»: ${result.message}",
+                message = "Поиск «${query}»: ${result.message}" + result.noteSuffix(),
                 variantsCount = 0,
                 createdAt = now,
             )
         }
         repository.logCheck(entry)
+    }
+
+    /**
+     * Диагноз приклеивается к сообщению журнала через « | »: у журнала одна строку на запись,
+     * и человек читает её целиком — заводить отдельную запись ради диагностики не за чем.
+     */
+    private fun SiteSearchResult.noteSuffix(): String {
+        val details = when (this) {
+            is SiteSearchResult.Success -> note
+            is SiteSearchResult.Error -> note
+        }
+        return if (details.isNullOrBlank()) "" else " | $details"
     }
 
     /**

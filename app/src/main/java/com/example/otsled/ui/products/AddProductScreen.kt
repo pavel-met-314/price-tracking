@@ -24,6 +24,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -105,6 +106,8 @@ fun AddProductScreen(
                 isSearching = uiState.isSearching,
                 hits = uiState.searchHits,
                 message = uiState.searchMessage,
+                note = uiState.searchNote,
+                retryable = uiState.searchRetryable,
                 viaWebView = uiState.searchViaWebView,
                 hasSearched = uiState.hasSearched,
                 onQueryChange = viewModel::onSearchQueryChange,
@@ -184,6 +187,8 @@ private fun SearchBlock(
     isSearching: Boolean,
     hits: List<SiteSearchHit>,
     message: String?,
+    note: String?,
+    retryable: Boolean,
     viaWebView: Boolean,
     hasSearched: Boolean,
     onQueryChange: (String) -> Unit,
@@ -253,6 +258,33 @@ private fun SearchBlock(
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(top = 8.dp),
                 )
+            }
+
+            if (retryable) {
+                OutlinedButton(
+                    onClick = onSearch,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                ) {
+                    Text(stringResource(R.string.search_retry))
+                }
+            }
+
+            if (note != null) {
+                // Тот самый текст, который нужно прислать, если «на телефоне пусто, а в браузере
+                // есть»: выделяется долгим тапом, чтобы его можно было скопировать целиком.
+                SelectionContainer(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp),
+                ) {
+                    Text(
+                        text = note,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             if (hits.isNotEmpty()) {

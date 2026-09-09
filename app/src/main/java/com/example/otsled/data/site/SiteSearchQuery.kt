@@ -28,9 +28,15 @@ sealed class SiteSearchResult {
         val hits: List<SiteSearchHit>,
         /** true — страницу отдавал WebView, то есть пришлось проходить проверку браузера. */
         val viaWebView: Boolean = false,
+        /** Короткий диагноз для журнала: что пробовали и что получили. */
+        val note: String? = null,
     ) : SiteSearchResult()
 
-    data class Error(val message: String, val kind: Kind) : SiteSearchResult()
+    data class Error(
+        val message: String,
+        val kind: Kind,
+        val note: String? = null,
+    ) : SiteSearchResult()
 
     enum class Kind {
         PARSE,
@@ -76,11 +82,13 @@ object SiteSearchQuery {
     fun isQueryTooShort(query: String): Boolean = cleanQuery(query).length < MIN_QUERY_LENGTH
 
     /**
-     * Признак готовности страницы: в ней появилась ссылка на товар. Нужен WebView-загрузчику,
-     * чтобы не ждать десятки секунд на странице, где цен по определению нет.
+     * Сколько ссылок на товары видно в разметке. Нужен не для разбора, а для журнала: «0 ссылок»
+     * и «страница-заглушка» — это разные поломки, и без счётчика их не отличить на расстоянии.
      */
-    fun hasProductLinks(html: String?): Boolean =
-        !html.isNullOrBlank() && PRODUCT_HREF_REGEX.containsMatchIn(html)
+    fun countProductLinks(html: String?): Int {
+        if (html.isNullOrBlank()) return 0
+        return PRODUCT_HREF_REGEX.findAll(html).count()
+    }
 
     fun extractHits(html: String?, query: String, limit: Int = MAX_HITS): List<SiteSearchHit> {
         if (html.isNullOrBlank()) return emptyList()

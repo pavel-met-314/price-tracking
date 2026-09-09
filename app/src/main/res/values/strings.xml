@@ -70,5 +70,6 @@
     <string name="search_no_price">цена не указана</string>
     <string name="search_add_action">Добавить</string>
     <string name="search_clear">Сбросить</string>
+    <string name="search_retry">Повторить поиск</string>
     <string name="product_url_or_search">Ссылка на товар</string>
 </resources>
