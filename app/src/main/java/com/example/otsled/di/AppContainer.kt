@@ -9,6 +9,7 @@ import com.example.otsled.data.repository.ProductRepository
 import com.example.otsled.data.site.AllureSiteSearch
 import com.example.otsled.data.settings.ParseSessionStore
 import com.example.otsled.data.settings.SettingsRepository
+import com.example.otsled.data.update.UpdateChecker
 import com.example.otsled.domain.PriceCheckUseCase
 import com.example.otsled.notification.PriceNotificationManager
 import com.example.otsled.worker.PriceCheckScheduler
@@ -62,6 +63,10 @@ class AppContainer(context: Context) {
             webViewFetcher = webViewPriceFetcher,
             sessionStore = parseSessionStore,
         )
+    }
+
+    val updateChecker: UpdateChecker by lazy {
+        UpdateChecker(applicationContext)
     }
 
     val notificationManager: PriceNotificationManager by lazy {

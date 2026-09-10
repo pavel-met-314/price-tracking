@@ -12,6 +12,14 @@ import android.content.pm.ApplicationInfo
  * сменился, `adb install -r` отказывает, и в настройках это видно по старой версии.
  */
 object AppBuildInfo {
+    /** Версия этой же сборки в человекочитаемом виде («1.2») — с ней сравниваем релиз на GitHub. */
+    fun versionName(context: Context): String? = info(context)?.versionName
+
+    private fun info(context: Context) = runCatching {
+        @Suppress("DEPRECATION")
+        context.packageManager.getPackageInfo(context.packageName, 0)
+    }.getOrNull()
+
     /** Например «1.1 (2) — debug». */
     fun describe(context: Context): String {
         val info = runCatching {

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Только подкаталог кэша с обновлениями: наружу не отдаётся ни база, ни настройки. -->
+<paths>
+    <cache-path name="updates" path="updates/" />
+</paths>

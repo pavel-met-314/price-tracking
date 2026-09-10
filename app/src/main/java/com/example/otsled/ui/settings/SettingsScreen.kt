@@ -17,6 +17,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -79,6 +80,15 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 16.dp),
+            )
+
+            val update by viewModel.update.collectAsStateWithLifecycle()
+            UpdateCard(
+                state = update,
+                onCheck = viewModel::checkForUpdate,
+                onDownload = viewModel::downloadUpdate,
+                onInstall = viewModel::installDownloaded,
+                onOpenPermission = viewModel::openInstallPermissionSettings,
             )
 
             Text(text = stringResource(R.string.check_interval), style = MaterialTheme.typography.titleMedium)
@@ -212,5 +222,120 @@ private fun CheckLogRow(entry: PriceCheckLog) {
                 color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
             )
         }
+    }
+}
+
+/**
+ * Ручная проверка обновления: «есть новая сборка» и «скачать» — отдельные нажатия, потому что
+ * второе стоит ~20 МБ трафика. Ставит файл системный установщик (по URI из кэша) — своего
+ * «тихого» обновления тут нет намеренно: приложение не подменяет собой магазин.
+ */
+@Composable
+private fun UpdateCard(
+    state: UpdateUiState,
+    onCheck: () -> Unit,
+    onDownload: () -> Unit,
+    onInstall: () -> Unit,
+    onOpenPermission: () -> Unit,
+) {
+    Card(modifier = Modifier
+        .fillMaxWidth()
+        .padding(top = 4.dp)) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                text = stringResource(R.string.update_title),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                text = updateStatusText(state),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            val progress = state.progress
+            if (state.stage == UpdateStage.DOWNLOADING && progress != null) {
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                when (state.stage) {
+                    UpdateStage.AVAILABLE -> Button(
+                        onClick = onDownload,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(stringResource(R.string.update_download, state.release?.versionName ?: ""))
+                    }
+
+                    UpdateStage.READY -> Button(
+                        onClick = onInstall,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(stringResource(R.string.update_install))
+                    }
+
+                    UpdateStage.NEEDS_PERMISSION -> {
+                        Button(onClick = onOpenPermission, modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.update_open_permission))
+                        }
+                        OutlinedButton(onClick = onInstall, modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.update_install))
+                        }
+                    }
+
+                    UpdateStage.DOWNLOADING -> Button(
+                        onClick = onDownload,
+                        enabled = false,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(stringResource(R.string.update_checking))
+                    }
+
+                    else -> Button(
+                        onClick = onCheck,
+                        enabled = state.stage != UpdateStage.CHECKING,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(
+                            stringResource(
+                                if (state.stage == UpdateStage.CHECKING) R.string.update_checking else R.string.update_check,
+                            ),
+                        )
+                    }
+                }
+            }
+            Text(
+                text = stringResource(R.string.update_desc),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun updateStatusText(state: UpdateUiState): String {
+    val remote = state.release?.versionName
+    return when (state.stage) {
+        UpdateStage.IDLE -> stringResource(R.string.update_idle)
+        UpdateStage.CHECKING -> stringResource(R.string.update_checking)
+        UpdateStage.UP_TO_DATE -> stringResource(R.string.update_up_to_date, remote ?: state.localVersion ?: "")
+        UpdateStage.AVAILABLE -> stringResource(R.string.update_available, remote ?: "?")
+        UpdateStage.DOWNLOADING -> state.progress?.let {
+            stringResource(R.string.update_downloading, (it * 100).toInt())
+        } ?: stringResource(R.string.update_downloading_unknown)
+
+        UpdateStage.READY -> stringResource(R.string.update_ready)
+        UpdateStage.NEEDS_PERMISSION -> stringResource(R.string.update_needs_permission)
+        UpdateStage.FAILED -> stringResource(R.string.update_failed, state.message ?: "")
     }
 }
