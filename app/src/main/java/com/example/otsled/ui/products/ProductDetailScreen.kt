@@ -245,34 +245,31 @@ private fun HistoryRow(entry: PriceHistoryEntry) {
  */
 @Composable
 private fun StatusNotice(product: TrackedProduct) {
-    val lines = buildList {
-        when (product.status) {
-            ProductStatus.OK, ProductStatus.NO_DATA -> Unit
-            ProductStatus.OUT_OF_STOCK -> add(stringResource(R.string.status_out_of_stock))
-            ProductStatus.NOT_FOUND -> add(stringResource(R.string.status_not_found))
-            ProductStatus.PARSE_FAILED -> add(stringResource(R.string.status_parse_failed))
-            ProductStatus.ACCESS_FAILED -> add(
-                if (product.isBotBlocked) {
-                    stringResource(R.string.problem_bot_blocked)
-                } else {
-                    stringResource(R.string.status_access_failed)
-                },
-            )
+    // Список собираем на месте, без buildList: composable-вызовы внутри чужой лямбды — лишний
+    // повод для вопросов компилятора, а здесь всё линейно и читается без неё.
+    val lines = mutableListOf<String>()
+    when (product.status) {
+        ProductStatus.OK, ProductStatus.NO_DATA -> Unit
+        ProductStatus.OUT_OF_STOCK -> lines += stringResource(R.string.status_out_of_stock)
+        ProductStatus.NOT_FOUND -> lines += stringResource(R.string.status_not_found)
+        ProductStatus.PARSE_FAILED -> lines += stringResource(R.string.status_parse_failed)
+        ProductStatus.ACCESS_FAILED -> lines += if (product.isBotBlocked) {
+            stringResource(R.string.problem_bot_blocked)
+        } else {
+            stringResource(R.string.status_access_failed)
         }
-        if (product.status.concernsProduct && product.lastPrice != null) {
-            add(stringResource(R.string.status_stale_price))
-        }
-        if (product.isPaused) {
-            add(
-                if (product.consecutiveFailures >= PAUSE_HINT_AFTER) {
-                    stringResource(R.string.status_paused_auto, product.consecutiveFailures)
-                } else {
-                    stringResource(R.string.status_paused)
-                },
-            )
-        }
-        product.archivedAt?.let { add(stringResource(R.string.status_archived, DateFormatter.format(it))) }
     }
+    if (product.status.concernsProduct && product.lastPrice != null) {
+        lines += stringResource(R.string.status_stale_price)
+    }
+    if (product.isPaused) {
+        lines += if (product.consecutiveFailures >= PAUSE_HINT_AFTER) {
+            stringResource(R.string.status_paused_auto, product.consecutiveFailures)
+        } else {
+            stringResource(R.string.status_paused)
+        }
+    }
+    product.archivedAt?.let { lines += stringResource(R.string.status_archived, DateFormatter.format(it)) }
     if (lines.isEmpty()) return
 
     Card(

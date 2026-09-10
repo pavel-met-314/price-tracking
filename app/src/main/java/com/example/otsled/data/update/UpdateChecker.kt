@@ -124,9 +124,10 @@ class UpdateChecker(
      * нельзя — на тапе он бы просто сообщил об ошибке без причины.
      */
     fun downloadedApk(): File? = File(context.cacheDir, APK_DIR)
-        .listFiles { file -> file.name.endsWith(".apk") }
-        ?.filter { it.length() > MIN_APK_BYTES }
-        ?.maxByOrNull { it.lastModified() }
+        .listFiles()
+        .orEmpty()
+        .filter { it.name.endsWith(".apk") && it.length() > MIN_APK_BYTES }
+        .maxByOrNull { it.lastModified() }
 
     fun forgetDownload() {
         runCatching {
