@@ -113,12 +113,16 @@ jobs:
 
           for path in sys.argv[1:]:
               src = open(path, encoding="utf-8", errors="replace").read()
-              for name, body in re.findall(r'<testcase name="([^"]+)"[^>]*>(.*?)</testcase>', src, re.S):
-                  m = re.search(r'<failure[^>]*message="([^"]*)"', body)
-                  if not m:
+              # Проход по кускам, а не парами «testcase…failure»: успешные тесты записаны
+              # самозакрывающимся тегом, и поиск по «<testcase>…</testcase>» сдвигает сообщение
+              # на чужой тест — по такому «диагнозу» можно починить не то.
+              for chunk in re.split(r"<testcase\b", src)[1:]:
+                  name = re.search(r'name="([^"]+)"', chunk)
+                  failure = re.search(r'<failure[^>]*message="([^"]*)"', chunk)
+                  if not name or not failure:
                       continue
-                  text = html.unescape(m.group(1)).replace("\n", " | ")
-                  print(name + " => " + text[:450])
+                  text = html.unescape(failure.group(1)).replace("\n", " | ")
+                  print(name.group(1) + " => " + text[:450])
           PY
           if [ ! -s /tmp/fails.txt ]; then
             exit 0

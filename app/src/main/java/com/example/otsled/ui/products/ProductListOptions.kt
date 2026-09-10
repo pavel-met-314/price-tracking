@@ -44,8 +44,9 @@ object ProductListOrdering {
             ProductSort.PRICE_ASC ->
                 kept.sortedWith(Comparator<ProductListRow> { a, b -> compareNullable(a.price, b.price, nullsFirst = false) })
 
-            ProductSort.PRICE_DESC ->
-                kept.sortedWith(Comparator<ProductListRow> { a, b -> -compareNullable(a.price, b.price, nullsFirst = false) })
+            ProductSort.PRICE_DESC -> kept.sortedWith(
+                Comparator<ProductListRow> { a, b -> comparePriceDescending(a.price, b.price) },
+            )
 
             ProductSort.DROP ->
                 kept.sortedWith(Comparator<ProductListRow> { a, b -> compareNullable(a.trendDelta, b.trendDelta, nullsFirst = false) })
@@ -76,6 +77,18 @@ object ProductListOrdering {
             val target = product.targetPrice ?: return false
             return price <= target
         }
+
+    /**
+     * Убывание цены: отсутствие значения по-прежнему в конце. Отрицать результат
+     * compareNullable нельзя — тогда «цены нет» становилось бы «самой большой ценой» и выезжало
+     на начало списка (на этом тест и поймал первую версию метода).
+     */
+    private fun comparePriceDescending(a: Double?, b: Double?): Int = when {
+        a == null && b == null -> 0
+        a == null -> 1
+        b == null -> -1
+        else -> b.compareTo(a)
+    }
 
     /** Название сравниваем без регистра; если его нет — ссылкой, чтобы товар не уезжал в конец. */
     private fun ProductListRow.sortableName(): String =
