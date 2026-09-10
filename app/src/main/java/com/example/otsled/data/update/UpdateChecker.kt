@@ -60,12 +60,13 @@ class UpdateChecker(
             if (target.exists() && !target.delete()) throw IOException("старый файл установки занят")
 
             val request = Request.Builder().url(info.apkUrl).header("User-Agent", USER_AGENT).build()
+            // Счётчик живёт вне `use`: после закрытия ответа он ещё нужен для проверки размера.
+            var written = 0L
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) throw IOException("скачивание не удалось (${response.code})")
                 val stream = response.body?.byteStream() ?: throw IOException("пустой ответ")
                 val total = response.body?.contentLength()?.takeIf { it > 0 }
 
-                var written = 0L
                 target.outputStream().use { output ->
                     val buffer = ByteArray(BUFFER_SIZE)
                     while (true) {

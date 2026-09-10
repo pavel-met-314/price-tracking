@@ -14,6 +14,10 @@ object AppUpdateFeed {
     const val LATEST_RELEASE_API = "https://api.github.com/repos/$REPO/releases/latest"
     const val APK_ASSET = "app-debug.apk"
 
+    /** Ключи JSON-ответа, от которых зависит, где искать заголовок и ассеты. */
+    private const val ASSETS_KEY = "\"assets\""
+    private const val TAG_KEY = "\"tag_name\""
+
     /** Любая строка `"name": "…"`, включая `\"` внутри значения. */
     private val NAME_REGEX = Regex("""(?iu)"name"\s*:\s*"((?:[^"\\]|\\.)*)"""", RegexOption.IGNORE_CASE)
     private val APK_URL_REGEX = Regex(
@@ -34,11 +38,11 @@ object AppUpdateFeed {
 
         // Ссылку ищем только внутри «assets»: иначе первое совпадение пришлось бы на url'ы самого
         // релиза, а это не файл.
-        val assets = json.substringAfter(""assets"", "")
+        val assets = json.substringAfter(ASSETS_KEY, "")
         val apkUrl = APK_URL_REGEX.find(assets)?.groupValues?.get(1)?.unescape() ?: return null
         // Заголовок релиза ищем после «tag_name»: до него идёт объект author, у которого тоже есть
         // «name» — имя разработчика, а не название сборки.
-        val title = NAME_REGEX.find(json.substringAfter(""tag_name"", json))
+        val title = NAME_REGEX.find(json.substringAfter(TAG_KEY, json))
             ?.groupValues?.get(1)?.unescape()
         val version = title?.let { VERSION_REGEX.find(it)?.groupValues?.get(1) } ?: return null
 
