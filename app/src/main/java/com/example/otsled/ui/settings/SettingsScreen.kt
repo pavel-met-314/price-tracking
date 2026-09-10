@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -36,6 +37,7 @@ import com.example.otsled.data.settings.SettingsRepository
 import com.example.otsled.domain.model.PriceCheckLog
 import com.example.otsled.ui.AppViewModelFactory
 import com.example.otsled.ui.permissions.rememberNotificationPermissionState
+import com.example.otsled.util.AppBuildInfo
 import com.example.otsled.util.DateFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -70,6 +72,15 @@ fun SettingsScreen(
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState()),
         ) {
+            // Отвечает на «а та ли версия на телефоне?»: без этой строки отказ установки по
+            // подписи выглядит как «разработчик ничего не сделал».
+            Text(
+                text = stringResource(R.string.settings_build, AppBuildInfo.describe(LocalContext.current)),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 16.dp),
+            )
+
             Text(text = stringResource(R.string.check_interval), style = MaterialTheme.typography.titleMedium)
             Row(
                 modifier = Modifier

@@ -12,11 +12,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
 /** Товар вместе с рядом точек для мини-графика. */
@@ -30,6 +28,22 @@ data class ProductListRow(
             if (points.size < 2) return null
             return points.last().price - points.first().price
         }
+}
+
+/**
+ * Всё, что нужно экрану: показываемые строки, сколько товаров всего и выбранные порядок с
+ * фильтром — одним состоянием. Отдельные потоки на строки и на счётчик разъезжаются на первом
+ * кадре (счётчик ещё 0, строки уже есть), и экран выглядел бы как список без чипов фильтра.
+ */
+data class ProductListUiState(
+    val rows: List<ProductListRow> = emptyList(),
+    val totalCount: Int = 0,
+    val sort: ProductSort = ProductSort.ADDED,
+    val filter: ProductFilter = ProductFilter.ALL,
+) {
+    val isEmptyList: Boolean get() = totalCount == 0
+    val isFilterEmpty: Boolean get() = !isEmptyList && rows.isEmpty()
+    val showsAll: Boolean get() = filter == ProductFilter.ALL
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -60,22 +74,16 @@ class ProductListViewModel(
         }
 
     private val _sort = MutableStateFlow(ProductSort.ADDED)
-    val sort = _sort.asStateFlow()
-
     private val _filter = MutableStateFlow(ProductFilter.ALL)
-    val filter = _filter.asStateFlow()
 
-    /**
-     * Что показывать в списке. Порядок и фильтр применяются здесь, а не на экране: иначе список
-     * пересчитывался бы на каждой перезаписи композиции и показывал кадр со старым фильтром.
-     */
-    val visibleRows: StateFlow<List<ProductListRow>> = combine(rows, _sort, _filter) { source, sort, filter ->
-        ProductListOrdering.apply(source, sort, filter)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    /** Всего товаров — нужно, чтобы «2 из 9» не читалось как «в списке два товара». */
-    val totalCount: StateFlow<Int> = rows.map { it.size }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    val state: StateFlow<ProductListUiState> = combine(rows, _sort, _filter) { source, sort, filter ->
+        ProductListUiState(
+            rows = ProductListOrdering.apply(source, sort, filter),
+            totalCount = source.size,
+            sort = sort,
+            filter = filter,
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ProductListUiState())
 
     fun onSortSelected(value: ProductSort) {
         _sort.value = value

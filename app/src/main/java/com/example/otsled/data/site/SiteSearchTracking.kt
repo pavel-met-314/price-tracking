@@ -13,6 +13,7 @@ import com.example.otsled.domain.model.TrackedProduct
  * слэш в конце и разный регистр хоста должны узнаваться как один и тот же товар.
  */
 object SiteSearchTracking {
+    private const val MAX_URL_IN_REPORT = 96
 
     /** Ключ карты — канонический URL товара, значение — его id в базе. */
     fun trackedIdsByUrl(products: List<TrackedProduct>): Map<String, Long> {
@@ -28,6 +29,35 @@ object SiteSearchTracking {
 
     /** id отслеживаемого товара для строки выдачи, или null — если такой товар ещё не добавлен. */
     fun trackedId(hit: SiteSearchHit, tracked: Map<String, Long>): Long? = tracked[canonical(hit.url)]
+
+    /**
+     * Ключи — URL строк выдачи (те же строки, что пришли в `SiteSearchHit`), значения — id
+     * отслеживаемого товара. Отдаём готовую карту, чтобы экран не пересчитывал нормализацию URL
+     * на каждой перерисовке списка.
+     */
+    fun resolve(hits: List<SiteSearchHit>, tracked: Map<String, Long>): Map<String, Long> {
+        val result = LinkedHashMap<String, Long>()
+        hits.forEach { hit ->
+            trackedId(hit, tracked)?.let { id -> result[hit.url] = id }
+        }
+        return result
+    }
+
+    /**
+     * Диагностическая строка о сопоставлении: её видно под выдачей и она попадает в «Журнал
+     * проверок». Без неё «пометка не появилась» неотличимо от «такого товара нет в списке», а
+     * разница между ними — только в том, сошлись URL или нет; вот эти URL и показываем.
+     */
+    fun report(hits: List<SiteSearchHit>, tracked: Map<String, Long>): String {
+        if (hits.isEmpty()) return ""
+        val matched = hits.count { trackedId(it, tracked) != null }
+        val head = "совпало со списком $matched из ${hits.size} (в списке ${tracked.size})"
+        if (matched > 0 || tracked.isEmpty()) return head
+        return "$head; в выдаче ${cut(canonical(hits.first().url))}, в базе ${cut(tracked.keys.first())}"
+    }
+
+    private fun cut(value: String): String =
+        if (value.length <= MAX_URL_IN_REPORT) value else value.take(MAX_URL_IN_REPORT) + "…"
 
     /**
      * Вид URL, по которому одна и та же страница товара выглядит одинаково: `normalize` делает

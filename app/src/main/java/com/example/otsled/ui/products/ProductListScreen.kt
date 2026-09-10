@@ -50,10 +50,7 @@ fun ProductListScreen(
     onOpenProduct: (Long) -> Unit,
 ) {
     val viewModel: ProductListViewModel = viewModel(factory = viewModelFactory)
-    val rows by viewModel.visibleRows.collectAsStateWithLifecycle()
-    val totalCount by viewModel.totalCount.collectAsStateWithLifecycle()
-    val sort by viewModel.sort.collectAsStateWithLifecycle()
-    val filter by viewModel.filter.collectAsStateWithLifecycle()
+    val state by viewModel.state.collectAsStateWithLifecycle()
 
     val sortOptions = sortOptions()
     val filterOptions = filterOptions()
@@ -64,12 +61,12 @@ fun ProductListScreen(
                 title = {
                     Column {
                         Text(stringResource(R.string.products_title))
-                        if (totalCount > 0) {
+                        if (state.totalCount > 0) {
                             Text(
-                                text = if (filter == ProductFilter.ALL) {
-                                    stringResource(R.string.products_list_count, totalCount)
+                                text = if (state.showsAll) {
+                                    stringResource(R.string.products_list_count, state.totalCount)
                                 } else {
-                                    stringResource(R.string.products_list_count_filtered, rows.size, totalCount)
+                                    stringResource(R.string.products_list_count_filtered, state.rows.size, state.totalCount)
                                 },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -97,23 +94,23 @@ fun ProductListScreen(
         ) {
             // Выбор порядка и фильтра живёт над списком и не уезжает при прокрутке: сменить
             // фильтр, не найдя сначала «куда делись товары», — то, чем список неудобнее всего.
-            if (totalCount > 0) {
+            if (state.totalCount > 0) {
                 ChoiceRow(
                     label = stringResource(R.string.products_sort_label),
                     options = sortOptions.map { option -> stringResource(option.second) },
-                    selectedIndex = sortOptions.indexOfFirst { it.first == sort },
+                    selectedIndex = sortOptions.indexOfFirst { it.first == state.sort },
                     onSelect = { index -> viewModel.onSortSelected(sortOptions[index].first) },
                 )
                 ChoiceRow(
                     label = stringResource(R.string.products_filter_label),
                     options = filterOptions.map { option -> stringResource(option.second) },
-                    selectedIndex = filterOptions.indexOfFirst { it.first == filter },
+                    selectedIndex = filterOptions.indexOfFirst { it.first == state.filter },
                     onSelect = { index -> viewModel.onFilterSelected(filterOptions[index].first) },
                 )
             }
 
             when {
-                totalCount == 0 -> Box(
+                state.isEmptyList -> Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(16.dp),
@@ -129,7 +126,7 @@ fun ProductListScreen(
                     }
                 }
 
-                rows.isEmpty() -> Box(
+                state.isFilterEmpty -> Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(16.dp),
@@ -154,7 +151,7 @@ fun ProductListScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    items(rows, key = { it.product.id }) { row ->
+                    items(state.rows, key = { it.product.id }) { row ->
                         ProductCard(row = row, onClick = { onOpenProduct(row.product.id) })
                     }
                 }

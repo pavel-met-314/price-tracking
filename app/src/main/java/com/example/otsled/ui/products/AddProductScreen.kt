@@ -45,7 +45,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.otsled.R
 import com.example.otsled.data.site.SiteSearchHit
-import com.example.otsled.data.site.SiteSearchTracking
 import com.example.otsled.ui.AppViewModelFactory
 import com.example.otsled.util.PriceFormatter
 
@@ -204,7 +203,7 @@ private fun SearchBlock(
     onClear: () -> Unit,
     onPick: (SiteSearchHit) -> Unit,
     onOpenBrowserCheck: () -> Unit,
-    /** Канонический URL строки выдачи -> id товара, который уже отслеживается. */
+    /** URL строки выдачи -> id товара, который уже отслеживается (пусто, если совпадений нет). */
     trackedIds: Map<String, Long>,
     onOpenProduct: (Long) -> Unit,
 ) {
@@ -322,7 +321,7 @@ private fun SearchBlock(
                 hits.forEach { hit ->
                     SearchHitRow(
                         hit = hit,
-                        trackedProductId = SiteSearchTracking.trackedId(hit, trackedIds),
+                        trackedProductId = trackedIds[hit.url],
                         onSelect = { onPick(hit) },
                         onOpenProduct = onOpenProduct,
                     )

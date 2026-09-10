@@ -40,8 +40,9 @@ data class AddProductUiState(
     /** true — ошибка временная (проверка браузера или сеть), имеет смысл нажать «Повторить». */
     val searchRetryable: Boolean = false,
     /**
-     * Канонический URL уже отслеживаемого товара -> его id. Нужно, чтобы строка выдачи не
-     * выглядела как «товар не найден»: повторное добавление затирало бы цель и уведомления.
+     * URL строки выдачи -> id уже отслеживаемого товара (только совпавшие строки). Нужно, чтобы
+     * повторный наход того же товара не выглядел как «добавьте заново»: вставка с тем же URL
+     * затирала бы цель и настройки уведомлений.
      */
     val searchTrackedIds: Map<String, Long> = emptyMap(),
 )
@@ -99,7 +100,7 @@ class AddProductViewModel(
             logSearchOutcome(query, result)
             // Спрашиваем свой список после поиска, а не до: поиск может длиться десятки секунд,
             // и за это время товар успели удалить или добавить вручную.
-            val trackedIds = if (result is SiteSearchResult.Success) {
+            val tracked = if (result is SiteSearchResult.Success) {
                 SiteSearchTracking.trackedIdsByUrl(repository.getActiveProducts())
             } else {
                 emptyMap()
@@ -114,7 +115,8 @@ class AddProductViewModel(
                         searchMessage = null,
                         searchNote = result.note,
                         searchRetryable = false,
-                        searchTrackedIds = trackedIds,
+                        searchTrackedIds = SiteSearchTracking.resolve(result.hits, tracked),
+                        searchNote = combineNotes(result.note, SiteSearchTracking.report(result.hits, tracked)),
                     )
                     is SiteSearchResult.Error -> state.copy(
                         isSearching = false,
@@ -161,6 +163,13 @@ class AddProductViewModel(
             )
         }
         repository.logCheck(entry)
+    }
+
+    /** Диагноз разбора и результат сопоставления со списком — одной строкой: их читают вместе. */
+    private fun combineNotes(note: String?, matchReport: String): String? = when {
+        matchReport.isBlank() -> note
+        note.isNullOrBlank() -> matchReport
+        else -> "$note | $matchReport"
     }
 
     /**

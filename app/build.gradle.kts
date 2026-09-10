@@ -15,10 +15,26 @@ android {
         applicationId = "com.example.otsled"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        getByName("debug") {
+            // Ключ лежит в репозитории намеренно: это отладочный ключ, и он должен быть один на
+            // все прогоны CI. Без него каждый сборщик генерирует свой ~/.android/debug.keystore,
+            // подписи APK из разных прогонов не совпадают, и `adb install -r` отказывает с
+            // INSTALL_FAILED_UPDATE_INCOMPATIBLE — на телефоне при этом остаётся старая версия.
+            // Для публикации в RuStore/Play нужен отдельный release-ключ, и его в git класть
+            // нельзя (см. README, раздел «Подпись и обновления»).
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+            storeType = "PKCS12"
+        }
     }
 
     buildTypes {

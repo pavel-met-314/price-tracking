@@ -2,6 +2,7 @@ package com.example.otsled.data.site
 
 import com.example.otsled.domain.model.TrackedProduct
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -63,6 +64,37 @@ class SiteSearchTrackingTest {
         val tracked = SiteSearchTracking.trackedIdsByUrl(emptyList())
 
         assertNull(SiteSearchTracking.trackedId(hit(page), tracked))
+    }
+
+    @Test
+    fun resolveKeysByHitUrl() {
+        val tracked = SiteSearchTracking.trackedIdsByUrl(listOf(product(7, page)))
+        val hits = listOf(hit(page), hit("https://allureparfum.ru/katalog/creed/aventus.html"))
+
+        val resolved = SiteSearchTracking.resolve(hits, tracked)
+
+        assertEquals(mapOf(page to 7L), resolved)
+    }
+
+    @Test
+    fun reportCountsMatchesAndNamesBothSidesWhenNothingMatched() {
+        val tracked = SiteSearchTracking.trackedIdsByUrl(listOf(product(7, "https://allureparfum.ru/katalog/xerjoff/naxos.html")))
+        val hits = listOf(hit(page), hit("$page?PAGEN_1=2"))
+
+        val report = SiteSearchTracking.report(hits, tracked)
+
+        // Счёт совпадений — то, по чему «пометки нет» различается с «такого товара нет».
+        assertTrue(report.startsWith("совпало со списком 0 из 2 (в списке 1)"))
+        assertTrue(report.contains("в выдаче $page"))
+        assertTrue(report.contains("в базе https://allureparfum.ru/katalog/xerjoff/naxos.html"))
+    }
+
+    @Test
+    fun reportStaysQuietWhenEverythingMatchedOrNothingSearched() {
+        val tracked = SiteSearchTracking.trackedIdsByUrl(listOf(product(7, page)))
+
+        assertEquals("совпало со списком 1 из 1 (в списке 1)", SiteSearchTracking.report(listOf(hit(page)), tracked))
+        assertEquals("", SiteSearchTracking.report(emptyList(), tracked))
     }
 
     @Test
