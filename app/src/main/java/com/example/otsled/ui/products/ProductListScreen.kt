@@ -1,24 +1,29 @@
 package com.example.otsled.ui.products
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -45,12 +50,33 @@ fun ProductListScreen(
     onOpenProduct: (Long) -> Unit,
 ) {
     val viewModel: ProductListViewModel = viewModel(factory = viewModelFactory)
-    val rows by viewModel.rows.collectAsStateWithLifecycle()
+    val rows by viewModel.visibleRows.collectAsStateWithLifecycle()
+    val totalCount by viewModel.totalCount.collectAsStateWithLifecycle()
+    val sort by viewModel.sort.collectAsStateWithLifecycle()
+    val filter by viewModel.filter.collectAsStateWithLifecycle()
+
+    val sortOptions = sortOptions()
+    val filterOptions = filterOptions()
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.products_title)) },
+                title = {
+                    Column {
+                        Text(stringResource(R.string.products_title))
+                        if (totalCount > 0) {
+                            Text(
+                                text = if (filter == ProductFilter.ALL) {
+                                    stringResource(R.string.products_list_count, totalCount)
+                                } else {
+                                    stringResource(R.string.products_list_count_filtered, rows.size, totalCount)
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                },
                 actions = {
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings))
@@ -64,37 +90,132 @@ fun ProductListScreen(
             }
         },
     ) { padding ->
-        if (rows.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center,
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(stringResource(R.string.empty_products), style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        stringResource(R.string.empty_products_hint),
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                }
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+        ) {
+            // Выбор порядка и фильтра живёт над списком и не уезжает при прокрутке: сменить
+            // фильтр, не найдя сначала «куда делись товары», — то, чем список неудобнее всего.
+            if (totalCount > 0) {
+                ChoiceRow(
+                    label = stringResource(R.string.products_sort_label),
+                    options = sortOptions.map { option -> stringResource(option.second) },
+                    selectedIndex = sortOptions.indexOfFirst { it.first == sort },
+                    onSelect = { index -> viewModel.onSortSelected(sortOptions[index].first) },
+                )
+                ChoiceRow(
+                    label = stringResource(R.string.products_filter_label),
+                    options = filterOptions.map { option -> stringResource(option.second) },
+                    selectedIndex = filterOptions.indexOfFirst { it.first == filter },
+                    onSelect = { index -> viewModel.onFilterSelected(filterOptions[index].first) },
+                )
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                items(rows, key = { it.product.id }) { row ->
-                    ProductCard(row = row, onClick = { onOpenProduct(row.product.id) })
+
+            when {
+                totalCount == 0 -> Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(stringResource(R.string.empty_products), style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            text = stringResource(R.string.empty_products_hint),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                }
+
+                rows.isEmpty() -> Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = stringResource(R.string.products_empty_after_filter),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        OutlinedButton(
+                            onClick = viewModel::resetFilter,
+                            modifier = Modifier.padding(top = 12.dp),
+                        ) {
+                            Text(stringResource(R.string.products_reset_filter))
+                        }
+                    }
+                }
+
+                else -> LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    items(rows, key = { it.product.id }) { row ->
+                        ProductCard(row = row, onClick = { onOpenProduct(row.product.id) })
+                    }
                 }
             }
         }
     }
 }
+
+/**
+/**
+ * Одна строка выбора: подпись и чипы. Порядок вариантов задаёт экран, поэтому выбор передаётся
+ * индексом — сравнивать подписи строкой значило бы сделать тексты частью контракта.
+ */
+@Composable
+private fun ChoiceRow(
+    label: String,
+    options: List<String>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        options.forEachIndexed { index, text ->
+            FilterChip(
+                selected = index == selectedIndex,
+                onClick = { onSelect(index) },
+                label = { Text(text) },
+            )
+        }
+    }
+}
+
+private fun sortOptions(): List<Pair<ProductSort, Int>> = listOf(
+    ProductSort.ADDED to R.string.sort_added,
+    ProductSort.NAME to R.string.sort_name,
+    ProductSort.PRICE_ASC to R.string.sort_price_asc,
+    ProductSort.PRICE_DESC to R.string.sort_price_desc,
+    ProductSort.DROP to R.string.sort_drop,
+    ProductSort.STALE to R.string.sort_stale,
+)
+
+private fun filterOptions(): List<Pair<ProductFilter, Int>> = listOf(
+    ProductFilter.ALL to R.string.filter_all,
+    ProductFilter.BELOW_TARGET to R.string.filter_below_target,
+    ProductFilter.DROPPED to R.string.filter_dropped,
+    ProductFilter.PROBLEM to R.string.filter_problem,
+    ProductFilter.NO_PRICE to R.string.filter_no_price,
+)
+
+
 
 @Composable
 private fun ProductCard(
@@ -139,6 +260,7 @@ private fun ProductCard(
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(top = 4.dp),
                 )
+
                 product.hasCheckProblem -> Text(
                     text = stringResource(R.string.problem_checks_failed, product.consecutiveFailures),
                     style = MaterialTheme.typography.bodySmall,

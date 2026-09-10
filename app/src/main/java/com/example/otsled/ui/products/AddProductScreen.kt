@@ -45,6 +45,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.otsled.R
 import com.example.otsled.data.site.SiteSearchHit
+import com.example.otsled.data.site.SiteSearchTracking
 import com.example.otsled.ui.AppViewModelFactory
 import com.example.otsled.util.PriceFormatter
 
@@ -55,6 +56,7 @@ fun AddProductScreen(
     onBack: () -> Unit,
     onSaved: () -> Unit,
     onOpenBrowserCheck: () -> Unit,
+    onOpenProduct: (Long) -> Unit,
 ) {
     val viewModel: AddProductViewModel = viewModel(factory = viewModelFactory)
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -118,6 +120,8 @@ fun AddProductScreen(
                 onClear = viewModel::clearSearch,
                 onPick = viewModel::useSearchHit,
                 onOpenBrowserCheck = onOpenBrowserCheck,
+                trackedIds = uiState.searchTrackedIds,
+                onOpenProduct = onOpenProduct,
             )
 
             OutlinedTextField(
@@ -200,6 +204,9 @@ private fun SearchBlock(
     onClear: () -> Unit,
     onPick: (SiteSearchHit) -> Unit,
     onOpenBrowserCheck: () -> Unit,
+    /** Канонический URL строки выдачи -> id товара, который уже отслеживается. */
+    trackedIds: Map<String, Long>,
+    onOpenProduct: (Long) -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -313,7 +320,12 @@ private fun SearchBlock(
                     )
                 }
                 hits.forEach { hit ->
-                    SearchHitRow(hit = hit, onSelect = { onPick(hit) })
+                    SearchHitRow(
+                        hit = hit,
+                        trackedProductId = SiteSearchTracking.trackedId(hit, trackedIds),
+                        onSelect = { onPick(hit) },
+                        onOpenProduct = onOpenProduct,
+                    )
                 }
             } else if (!isSearching && hasSearched && message == null) {
                 Text(
@@ -327,16 +339,30 @@ private fun SearchBlock(
 }
 
 @Composable
-private fun SearchHitRow(hit: SiteSearchHit, onSelect: () -> Unit) {
+private fun SearchHitRow(
+    hit: SiteSearchHit,
+    trackedProductId: Long?,
+    onSelect: () -> Unit,
+    onOpenProduct: (Long) -> Unit,
+) {
     val priceText = hit.price?.let { stringResource(R.string.search_price, PriceFormatter.formatPrice(it)) }
         ?: stringResource(R.string.search_no_price)
     val details = listOfNotNull(priceText, hit.volumeLabel).joinToString(" · ")
+    // Товар уже в списке: тап ведёт к нему, а не создаёт вторую запись на ту же страницу.
+    val alreadyTracked = trackedProductId != null
+    val actionText = if (alreadyTracked) {
+        stringResource(R.string.search_open_action)
+    } else {
+        stringResource(R.string.search_add_action)
+    }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 6.dp)
-            .clickable(onClick = onSelect),
+            .clickable {
+                if (alreadyTracked) onOpenProduct(trackedProductId) else onSelect()
+            },
     ) {
         Row(
             modifier = Modifier.padding(10.dp),
@@ -354,9 +380,16 @@ private fun SearchHitRow(hit: SiteSearchHit, onSelect: () -> Unit) {
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (alreadyTracked) {
+                    Text(
+                        text = stringResource(R.string.search_tracked_badge),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.tertiary,
+                    )
+                }
             }
             Text(
-                text = stringResource(R.string.search_add_action),
+                text = actionText,
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(start = 8.dp),

@@ -8,6 +8,7 @@ import com.example.otsled.data.parser.ParsedProductVariant
 import com.example.otsled.data.parser.ProductUrlNormalizer
 import com.example.otsled.data.site.SiteSearchHit
 import com.example.otsled.data.site.SiteSearchResult
+import com.example.otsled.data.site.SiteSearchTracking
 import com.example.otsled.di.AppContainer
 import com.example.otsled.domain.model.PriceCheckLog
 import com.example.otsled.domain.model.PriceHistoryEntry
@@ -38,6 +39,11 @@ data class AddProductUiState(
     val searchNote: String? = null,
     /** true — ошибка временная (проверка браузера или сеть), имеет смысл нажать «Повторить». */
     val searchRetryable: Boolean = false,
+    /**
+     * Канонический URL уже отслеживаемого товара -> его id. Нужно, чтобы строка выдачи не
+     * выглядела как «товар не найден»: повторное добавление затирало бы цель и уведомления.
+     */
+    val searchTrackedIds: Map<String, Long> = emptyMap(),
 )
 
 class AddProductViewModel(
@@ -60,7 +66,13 @@ class AddProductViewModel(
 
     fun clearSearch() {
         _uiState.update {
-            it.copy(searchQuery = "", searchHits = emptyList(), searchMessage = null, searchViaWebView = false)
+            it.copy(
+                searchQuery = "",
+                searchHits = emptyList(),
+                searchMessage = null,
+                searchViaWebView = false,
+                searchTrackedIds = emptyMap(),
+            )
         }
     }
 
@@ -85,6 +97,13 @@ class AddProductViewModel(
             }
             val result = siteSearch.search(query)
             logSearchOutcome(query, result)
+            // Спрашиваем свой список после поиска, а не до: поиск может длиться десятки секунд,
+            // и за это время товар успели удалить или добавить вручную.
+            val trackedIds = if (result is SiteSearchResult.Success) {
+                SiteSearchTracking.trackedIdsByUrl(repository.getActiveProducts())
+            } else {
+                emptyMap()
+            }
             _uiState.update { state ->
                 when (result) {
                     is SiteSearchResult.Success -> state.copy(
@@ -95,6 +114,7 @@ class AddProductViewModel(
                         searchMessage = null,
                         searchNote = result.note,
                         searchRetryable = false,
+                        searchTrackedIds = trackedIds,
                     )
                     is SiteSearchResult.Error -> state.copy(
                         isSearching = false,
@@ -103,6 +123,7 @@ class AddProductViewModel(
                         searchViaWebView = false,
                         searchMessage = result.message,
                         searchNote = result.note,
+                        searchTrackedIds = emptyMap(),
                         searchRetryable = result.kind == SiteSearchResult.Kind.BOT_CHALLENGE ||
                             result.kind == SiteSearchResult.Kind.NETWORK,
                     )

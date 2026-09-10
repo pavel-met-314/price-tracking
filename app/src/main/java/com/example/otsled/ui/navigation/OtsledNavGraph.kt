@@ -43,6 +43,7 @@ fun OtsledNavGraph(
                     navController.popBackStack()
                 },
                 onOpenBrowserCheck = { navController.navigate(Routes.BROWSER_CHECK) },
+                onOpenProduct = { id -> navController.navigate(Routes.productDetail(id)) },
             )
         }
         composable(
