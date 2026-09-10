@@ -17,6 +17,10 @@ jobs:
   build:
     name: Unit tests + debug APK
     runs-on: ubuntu-latest
+    # Публикация релиза пишет в репозиторий, поэтому права на запись — только у этой работы:
+    # весь workflow по-прежнему читает код.
+    permissions:
+      contents: write
     timeout-minutes: 30
 
     # Без явного bash GitHub запускает steps как `bash -e {0}` (без pipefail), и любой
@@ -150,6 +154,39 @@ jobs:
             **/outputs/apk/**/*.apk
           if-no-files-found: warn
           retention-days: 14
+
+      # Постоянная ссылка на последнюю сборку: открывается в браузере телефона и скачивается
+      # одним тапом — без архивов, пересылок и распаковки. Только на push: у токена pull_request
+      # нет прав на релизы, и шаг падал бы на PR, пряча настоящую причину.
+      - name: Publish APK to GitHub Release (latest)
+        if: success() && github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          apk=$(find . -path "*/outputs/apk/*" -name "*.apk" | head -1)
+          set -e
+          if [ -z "$apk" ]; then
+            echo "::error::APK не найден — публиковать нечего"
+            exit 1
+          fi
+          cp "$apk" /tmp/app-debug.apk
+          version=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' app/build.gradle.kts | head -1)
+          if [ -z "$version" ]; then version="?"; fi
+          notes=/tmp/release-notes.md
+          {
+            printf 'Последняя debug-сборка: %s, коммит `%s`.\n\n' "$version" "${GITHUB_SHA:0:7}"
+            printf 'Как поставить: скачать файл, открыть, при запросе разрешить установку этому приложению — разрешение выдаётся один раз.\n'
+            printf 'Обновление ставится поверх: все прогоны подписывают одним ключом app/debug.keystore.\n'
+          } > "$notes"
+          if gh release view latest >/dev/null 2>&1; then
+            gh release edit latest --title "Последняя сборка ($version)" --notes-file "$notes"
+            gh release upload latest /tmp/app-debug.apk --clobber
+          else
+            gh release create latest /tmp/app-debug.apk \
+              --title "Последняя сборка ($version)" --notes-file "$notes" --target "$GITHUB_SHA"
+          fi
+          echo "::notice::APK: https://github.com/$GITHUB_REPOSITORY/releases/download/latest/app-debug.apk"
 
       - name: Upload test reports
         if: always()
