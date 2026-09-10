@@ -92,7 +92,11 @@ class AllureSiteSearch(
                     (content.stubText?.takeIf { it.isNotBlank() }?.let { "заглушка «$it»" } ?: "проверка браузера не пройдена")
             }
 
-            val hits = SiteSearchQuery.extractHits(lastHtml, normalizedQuery)
+            val extraction = SiteSearchQuery.extractDetailed(lastHtml, normalizedQuery)
+            // Что ушло как «не по запросу» — часть диагноза: иначе «выдача пустая» и «мы отсёкли
+            // чужие блоки» выглядят одинаково и на телефоне неразличимы.
+            extraction.filterNote().takeIf { it.isNotBlank() }?.let { notes += "WebView: $it" }
+            val hits = extraction.hits
             if (hits.isNotEmpty()) {
                 sessionStore?.markSuccess()
                 return@withContext SiteSearchResult.Success(
@@ -220,9 +224,11 @@ class AllureSiteSearch(
             is Fetch.Ok -> {
                 val linkCount = SiteSearchQuery.countProductLinks(fetched.html)
                 notes += "$label ${kib(fetched.html)}, ссылок на товары $linkCount"
+                val extraction = SiteSearchQuery.extractDetailed(fetched.html, query)
+                extraction.filterNote().takeIf { it.isNotBlank() }?.let { notes += it }
                 val blocked = BotProtection.isChallengeHtml(fetched.html) || fetched.html.length < SHORT_BODY_LIMIT
                 HttpAttempt(
-                    hits = SiteSearchQuery.extractHits(fetched.html, query),
+                    hits = extraction.hits,
                     links = linkCount,
                     blocked = blocked,
                     fatal = null,

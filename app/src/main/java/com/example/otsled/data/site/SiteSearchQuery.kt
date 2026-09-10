@@ -21,6 +21,23 @@ data class SiteSearchHit(
     val fromResultsBlock: Boolean = false,
 )
 
+/**
+ * Разбор страницы поиска: строки плюс счётчики того, что в выдаче было и что отфильтровано.
+ *
+ * [offTopic] нужен не для UI, а для диагностики: «лишние строки убраны» и «строк не было вовсе»
+ * на глаз одинаковы, а лечатся по-разному — во втором случае фильтр слишком строгий.
+ */
+data class SiteSearchExtraction(
+    val hits: List<SiteSearchHit>,
+    /** Сколько строк в выдаче не содержат ни одного слова запроса и потому убраны. */
+    val offTopic: Int = 0,
+    /** Сколько разных товаров было в разметке до фильтра. */
+    val seen: Int = 0,
+) {
+    /** Строка для «Журнала проверок» и для диагноза под выдачей; пусто, если отсеивать было нечего. */
+    fun filterNote(): String = if (offTopic == 0) "" else "отсеяно $offTopic строк не по запросу (в выдаче $seen)"
+}
+
 /** Результат поиска по названию. Пустой список [SiteSearchResult.Success.hits] — не ошибка. */
 sealed class SiteSearchResult {
 
@@ -144,8 +161,22 @@ object SiteSearchQuery {
         return PRODUCT_HREF_REGEX.findAll(html).count()
     }
 
-    fun extractHits(html: String?, query: String, limit: Int = MAX_HITS): List<SiteSearchHit> {
-        if (html.isNullOrBlank()) return emptyList()
+    fun extractHits(html: String?, query: String, limit: Int = MAX_HITS): List<SiteSearchHit> =
+        extractDetailed(html, query, limit).hits
+
+    /**
+     * Разбор с отсевом строк чужих блоков.
+     *
+     * Страница поиска Allure оканчивается каруселью «Вы смотрели» (и иногда «Рекомендуем»): в
+     * разметке это такие же ссылки на страницы каталога (`/katalog/…/<slug>.html`), и без отсева отслеживаемые товары
+     * лезут в выдачу на любой запрос — при сорока позициях в списке искать новый товара
+     * невозможно. Отличить их можно по одному признаку, который не зависит от вёрстки: в
+     * названии результата есть слово из запроса. Поэтому строки без совпадения убираем, а если
+     * совпадений нет вообще — оставляем всё: так безопаснее, чем показать «ничего не найдено»
+     * там, где сайт нашёл товар по описанию, артикулу или транслитерации.
+     */
+    fun extractDetailed(html: String?, query: String, limit: Int = MAX_HITS): SiteSearchExtraction {
+        if (html.isNullOrBlank()) return SiteSearchExtraction(emptyList())
 
         val document = Jsoup.parse(html, BASE)
         val normalizedQuery = cleanQuery(query).lowercase()
@@ -180,7 +211,11 @@ object SiteSearchQuery {
             if (previous == null || hit.betterThan(previous)) byUrl[url] = hit
         }
 
-        return byUrl.values
+        val all = byUrl.values.toList()
+        val matched = if (tokens.isEmpty()) all else all.filter { matchesQuery(it, tokens) }
+        val kept = matched.ifEmpty { all }
+
+        val hits = kept
             .sortedWith(
                 compareByDescending<SiteSearchHit> { relevance(it, tokens, normalizedQuery) }
                     .thenByDescending { it.fromResultsBlock }
@@ -188,7 +223,22 @@ object SiteSearchQuery {
                     .thenBy { it.title.lowercase() },
             )
             .take(limit.coerceAtLeast(1))
+
+        return SiteSearchExtraction(
+            hits = hits,
+            offTopic = if (tokens.isEmpty()) 0 else all.size - matched.size,
+            seen = all.size,
+        )
     }
+
+    /** В названии есть хотя бы одно слово запроса — строка относится к выдаче. */
+    private fun matchesQuery(hit: SiteSearchHit, tokens: List<String>): Boolean {
+        val title = matchableTitle(hit)
+        return tokens.any { title.contains(it) }
+    }
+
+    /** « - » между брендом и названием вставляем мы, при сравнении с запросом она мешает. */
+    private fun matchableTitle(hit: SiteSearchHit): String = hit.title.lowercase().replace(" - ", " ")
 
     /** Строка результата «лучше» другой, если у неё больше полезных деталей. */
     private fun SiteSearchHit.betterThan(other: SiteSearchHit): Boolean =
@@ -197,9 +247,7 @@ object SiteSearchQuery {
             (price != null && price == other.price && title.length > other.title.length)
 
     private fun relevance(hit: SiteSearchHit, tokens: List<String>, query: String): Int {
-        // « - » между брендом и названием вставляется нами, а не сайтом: при сравнении с запросом
-        // её убираем, иначе точное совпадение с введённым названием не давало бы преимущества.
-        val title = hit.title.lowercase().replace(" - ", " ")
+        val title = matchableTitle(hit)
         var score = if (hit.fromResultsBlock) 6 else 0
         if (query.isNotBlank() && title.contains(query)) score += 12
         score += tokens.count { title.contains(it) } * 4

@@ -79,9 +79,20 @@ class SiteSearchQueryTest {
     fun relevancePutsExactNameFirst() {
         val hits = SiteSearchQuery.extractHits(searchResultsHtml, "ganymede")
 
-        assertEquals(3, hits.size)
+        // B336 — тот же бренд, но не «ganymede». Такую строку сайт под результатами показывает в
+        // блоке «похожие», и пользователю она в выдаче поиска не нужна.
+        assertEquals(2, hits.size)
         assertEquals(ganymedeUrl, hits[0].url)
-        assertTrue(hits[2].url.endsWith("b336.html"))
+        assertTrue(hits.all { it.title.contains("ganymede", ignoreCase = true) })
+    }
+
+    @Test
+    fun brandQueryKeepsAllProductsOfTheBrand() {
+        val hits = SiteSearchQuery.extractHits(searchResultsHtml, "Marc-Antoine Barrois")
+
+        // Поиск по бренду — это запрос про бренд: B336 подходит, «не по запросу» тут ничего нет.
+        assertTrue(hits.any { it.url.endsWith("b336.html") })
+        assertEquals(0, SiteSearchQuery.extractDetailed(searchResultsHtml, "Marc-Antoine Barrois").offTopic)
     }
 
     @Test
@@ -165,6 +176,71 @@ class SiteSearchQueryTest {
     fun emptyHtmlYieldsNoHits() {
         assertTrue(SiteSearchQuery.extractHits(null, "ganymede").isEmpty())
         assertTrue(SiteSearchQuery.extractHits("<html><body>нет товаров</body></html>", "ganymede").isEmpty())
+    }
+
+    /**
+     * То, из-за чего поиск выглядел сломанным: под результатами страница отдаёт карусель
+     * «Вы смотрели» с точно такими же ссылками на `/katalog/…`. Отслеживаемых товаров много — и
+     * все они лезут в выдачу на любой запрос.
+     */
+    private val recentlyViewedHtml = """
+        <!DOCTYPE html><html><body><main>
+        <h1>Результаты поиска «kirke»</h1>
+        <div class="search-result">
+          <div class="item">
+            <a href="/katalog/zhenskaya-parfyumeriya/tiziana-terenzi/kirke-70001.html"><img src="/i/1.jpg" alt="Tiziana Terenzi Kirke"></a>
+            <div class="info">
+              <a href="/brend/tiziana-terenzi/">Tiziana Terenzi</a>
+              <a href="/katalog/zhenskaya-parfyumeriya/tiziana-terenzi/kirke-70001.html">Kirke</a>
+              <div class="price">10 885 руб.</div>
+            </div>
+            <a href="/katalog/zhenskaya-parfyumeriya/tiziana-terenzi/kirke-70001.html">Подробнее</a>
+          </div>
+        </div>
+        <section class="slider"><h2>Вы смотрели</h2>
+          <div class="item">
+            <a href="/katalog/na_muzhchinye-arekate/xerjoff-1861-naxos-502.html"><img src="/i/2.jpg" alt="Xerjoff 1861 Naxos"></a>
+            <div class="info">
+              <a href="/brend/xerjoff/">Xerjoff</a>
+              <a href="/katalog/na_muzhchinye-arekate/xerjoff-1861-naxos-502.html">1861 Naxos</a>
+              <div class="price">335 руб.</div>
+            </div>
+            <a href="/katalog/na_muzhchinye-arekate/xerjoff-1861-naxos-502.html">Подробнее</a>
+          </div>
+          <div class="item">
+            <a href="/katalog/zhenskaya-parfyumeriya/paco-rabanne/black-xs-for-her-777.html"><img src="/i/3.jpg" alt="Paco Rabanne Black XS for Her"></a>
+            <div class="info">
+              <a href="/brend/paco-rabanne/">Paco Rabanne</a>
+              <a href="/katalog/zhenskaya-parfyumeriya/paco-rabanne/black-xs-for-her-777.html">Black XS for Her</a>
+              <div class="price">220 руб.</div>
+            </div>
+            <a href="/katalog/zhenskaya-parfyumeriya/paco-rabanne/black-xs-for-her-777.html">Подробнее</a>
+          </div>
+        </section>
+        </main></body></html>
+    """.trimIndent()
+
+    @Test
+    fun recentlyViewedProductsDoNotJoinTheResults() {
+        val extraction = SiteSearchQuery.extractDetailed(recentlyViewedHtml, "kirke")
+
+        assertEquals(1, extraction.hits.size)
+        assertEquals("Tiziana Terenzi - Kirke", extraction.hits[0].title)
+        assertEquals(10885.0, extraction.hits[0].price!!, 0.01)
+        assertEquals(2, extraction.offTopic)
+        assertEquals(3, extraction.seen)
+        assertEquals("отсеяно 2 строк не по запросу (в выдаче 3)", extraction.filterNote())
+    }
+
+    @Test
+    fun nothingIsDroppedWhenQueryMatchesNoTitles() {
+        // Поиск по артикулу: в названиях таких цифр нет. Оставить всё — правильное решение:
+        // «ничего не найдено» из-за собственного фильтра было бы хуже лишней строки.
+        val extraction = SiteSearchQuery.extractDetailed(recentlyViewedHtml, "76733")
+
+        assertEquals(3, extraction.hits.size)
+        assertEquals(0, extraction.offTopic)
+        assertEquals("", extraction.filterNote())
     }
 
     /**
