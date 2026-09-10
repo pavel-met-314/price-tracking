@@ -13,3 +13,6 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Локальное хранилище ключей: никогда не попадает в git.
+keys/

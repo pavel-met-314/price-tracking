@@ -20,23 +20,43 @@
   хранение. Её надо опубликовать по постоянному адресу (см. ниже).
 * `docs/rustore/icon-512.png` — иконка 512×512, без альфа-канала.
 
-## Ключ релиза: один раз и без права на потерю
+## Ключ и секреты: как завести с телефона
+
+Ключ уже сгенерирован и лежит в `keys/` (папка в `.gitignore`, в историю не попадает):
+`otsled-release.keystore`, его же base64 в `otsled-release.keystore.base64.txt` и пароли в
+`passwords.txt`. Агент не может заводить секреты репозитория — GitHub отдаёт
+`403 Resource not accessible by integration`, поэтому четыре значения вставляешь ты сам.
+
+1. GitHub → репозиторий → **Settings → Secrets and variables → Actions → New repository secret**
+   (на телефоне — меню ⋯ → Settings; нужен экран «Secrets and variables», а не «Environments»).
+2. Четыре секрета, имена ровно такие:
+
+   | Имя | Откуда значение |
+   | --- | --- |
+   | `OTSLED_RELEASE_KEYSTORE_BASE64` | содержимое `keys/otsled-release.keystore.base64.txt`, целиком одной строкой |
+   | `OTSLED_RELEASE_STORE_PASSWORD` | строка `storePassword` из `keys/passwords.txt` |
+   | `OTSLED_RELEASE_KEY_ALIAS` | `otsled` |
+   | `OTSLED_RELEASE_KEY_PASSWORD` | строка `keyPassword` из `keys/passwords.txt` |
+
+3. Проверка без нового коммита: **Actions → «CI» → Run workflow → Run workflow** (workflow
+   поддерживает `workflow_dispatch`). В прогоне шаг `Build release APK` должен сообщить
+   `release: подпись на месте`, а в релизе `latest` появиться `app-release.apk` и
+   `app-release-<версия>.apk`.
+4. Скачай `keys/` к себе (файлы + пароли) и храни в менеджере паролей. Потом папку можно удалить:
+   CI читает ключ из секретов, а не из рабочего дерева.
+
+Свой ключ (рекомендуется перед первой публикацией, пока в магазине пусто — смена подписи тогда
+ничего не ломает):
 
 ```bash
 keytool -genkeypair -v -keystore otsled-release.keystore -alias otsled \
-  -keyalg RSA -keysize 2048 -validity 10000 \
-  -dname "CN=<имя разработчика>, O=<он же>, C=RU"
+  -keyalg RSA -keysize 2048 -validity 10000 -storetype PKCS12 \
+  -dname "CN=<имя разработчика>, O=<он же>, C=FI"
+base64 -w0 otsled-release.keystore    # macOS: base64 -i файл | tr -d '\n'
 ```
 
-1. Пароль хранилища и ключа — свои, не `android`.
-2. Завести в репозитории GitHub четыре секрета:
-   `OTSLED_RELEASE_KEYSTORE_BASE64` (`base64 -w0 otsled-release.keystore`),
-   `OTSLED_RELEASE_STORE_PASSWORD`, `OTSLED_RELEASE_KEY_ALIAS`, `OTSLED_RELEASE_KEY_PASSWORD`.
-3. Файл ключа — в личное хранилище (менеджер паролей/диск), **не в git**. Потеряете — потеряете
-   возможность выпускать обновления для уже установленных копий: переустановка с удалением данных.
-
-Признак того, что всё сработало: в прогоне CI появилась строка `Publish APK to GitHub Release`, а в
-релизе `latest` лежат четыре файла (debug, debug-версия, release, release-версия).
+и теми же четырьмя секретами замени значения. Тип хранилища, если он не PKCS12 (старый JKS),
+передаётся переменной `OTSLED_RELEASE_STORE_TYPE`.
 
 ## Что заходит в магазин
 

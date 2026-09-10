@@ -15,8 +15,8 @@ android {
         applicationId = "com.example.otsled"
         minSdk = 24
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.6"
+        versionCode = 8
+        versionName = "1.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -46,6 +46,10 @@ android {
         if (releaseStoreFile != null && file(releaseStoreFile).isFile) {
             create("release") {
                 storeFile = file(releaseStoreFile)
+                // PKCS12 — то, что современный keytool и openssl пишут по умолчанию; переопределяется
+                // переменной окружения, если ключ вдруг окажется старым JKS.
+                storeType = System.getenv("OTSLED_RELEASE_STORE_TYPE")?.takeIf { it.isNotBlank() }
+                    ?: "PKCS12"
                 storePassword = System.getenv("OTSLED_RELEASE_STORE_PASSWORD")
                     ?: providers.gradleProperty("otsled.release.storePassword").orNull
                 keyAlias = System.getenv("OTSLED_RELEASE_KEY_ALIAS")

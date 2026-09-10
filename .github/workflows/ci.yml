@@ -145,22 +145,56 @@ jobs:
           files=$(find . -name "*.apk" -not -path "./.git/*" | tr '\n' ' ')
           echo "::notice::APK: ${files:-не найден — сборка прошла, но упаковка не создала файл}"
 
-      - name: Build release APK (нужен для публикации в RuStore)
+      - name: Build release APK (путь в RuStore)
         env:
-          # Секретов может не быть (форк или локальный прогон без ключа) — шаг тогда ничего не делает:
-          # debug-путь и тесты от этого не зависят.
+          # Секретов может не быть (форк или локальный прогон без ключа) — тогда APK выходит
+          # неподписанным и в релиз не попадает. Сборку же release гоняем всегда: конфигурация
+          # подписи, магазинный overlay манифеста и настройки lint иначе остались бы непроверенными
+          # до того дня, когда их уже нельзя откатить.
           OTSLED_RELEASE_KEYSTORE_BASE64: ${{ secrets.OTSLED_RELEASE_KEYSTORE_BASE64 }}
           OTSLED_RELEASE_STORE_FILE: ${{ runner.temp }}/otsled-release.keystore
           OTSLED_RELEASE_STORE_PASSWORD: ${{ secrets.OTSLED_RELEASE_STORE_PASSWORD }}
           OTSLED_RELEASE_KEY_ALIAS: ${{ secrets.OTSLED_RELEASE_KEY_ALIAS }}
           OTSLED_RELEASE_KEY_PASSWORD: ${{ secrets.OTSLED_RELEASE_KEY_PASSWORD }}
         run: |
-          if [ -z "${OTSLED_RELEASE_KEYSTORE_BASE64:-}" ]; then
-            echo "::notice::ключа релиза нет — release не собирается (для debug-прогонов это норма)"
-            exit 0
+          if [ -n "${OTSLED_RELEASE_KEYSTORE_BASE64:-}" ]; then
+            printf '%s' "$OTSLED_RELEASE_KEYSTORE_BASE64" | base64 -d > "$OTSLED_RELEASE_STORE_FILE"
+          else
+            echo "::notice::ключа релиза нет — собираем release неподписанным"
           fi
-          printf '%s' "$OTSLED_RELEASE_KEYSTORE_BASE64" | base64 -d > "$OTSLED_RELEASE_STORE_FILE"
           ./gradlew --no-daemon assembleRelease
+
+          # AndroidManifest.xml в APK бинарный, пул строк — UTF-16: отсюда strings -el. Проверка
+          # обеими кодировками, иначе «не нашли» легко перепутать с «не так искали».
+          has_install_permission() {
+            unzip -p "$1" AndroidManifest.xml > /tmp/am.bin 2>/dev/null || return 1
+            grep -aq "REQUEST_INSTALL_PACKAGES" /tmp/am.bin && return 0
+            strings -el /tmp/am.bin | grep -q "REQUEST_INSTALL_PACKAGES"
+          }
+
+          rel=$(find . -path "*/outputs/apk/release/*" -name "*.apk" | head -1)
+          if [ -z "$rel" ]; then
+            echo "::error::release APK не найден после сборки"
+            exit 1
+          fi
+          echo "release APK: $rel ($(stat -c%s "$rel") байт)"
+          if unzip -l "$rel" | grep -q "META-INF/MANIFEST.MF"; then
+            echo "::notice::release: подпись на месте (META-INF в архиве)"
+          else
+            echo "::notice::release: подписи нет — ожидаемо, пока секрет ключа не заведён"
+          fi
+          if has_install_permission "$rel"; then
+            echo "::error::release-манифест содержит REQUEST_INSTALL_PACKAGES — overlay из app/src/release не сработал"
+            exit 1
+          fi
+
+          dbg=$(find . -path "*/outputs/apk/debug/*" -name "*.apk" | head -1)
+          if [ -n "$dbg" ] && has_install_permission "$dbg"; then
+            echo "::notice::контроль: в debug-сборке то же разрешение есть — самообновление работает только там"
+          else
+            echo "::error::контроль не прошёл: разрешения нет даже в debug, значит проверка ни о чём не говорит"
+            exit 1
+          fi
 
       - name: Upload APK
         if: success()
