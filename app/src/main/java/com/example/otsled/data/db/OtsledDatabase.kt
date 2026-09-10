@@ -14,7 +14,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PriceHistoryEntryEntity::class,
         PriceCheckLogEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class OtsledDatabase : RoomDatabase() {
@@ -84,6 +84,16 @@ abstract class OtsledDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v4: архив вместо удаления. Товар, который «больше не интересен», не нужно стирать вместе
+         * с историей цен — достаточно убрать из проверок и из общего списка.
+         */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE products ADD COLUMN archivedAt INTEGER")
+            }
+        }
+
         fun getInstance(context: Context): OtsledDatabase {
             return instance ?: synchronized(this) {
                 instance ?: buildDatabase(context.applicationContext).also { instance = it }
@@ -92,7 +102,7 @@ abstract class OtsledDatabase : RoomDatabase() {
 
         private fun buildDatabase(context: Context): OtsledDatabase {
             return Room.databaseBuilder(context, OtsledDatabase::class.java, "otsled.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
         }
     }

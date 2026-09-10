@@ -23,6 +23,8 @@ class ProductListOrderingTest {
         history: List<Double> = emptyList(),
         failures: Int = 0,
         errorCode: String = "",
+        archivedAt: Long? = null,
+        isActive: Boolean = true,
     ) = ProductListRow(
         product = TrackedProduct(
             id = id,
@@ -33,6 +35,8 @@ class ProductListOrderingTest {
             lastCheckedAt = checkedAt,
             consecutiveFailures = failures,
             lastErrorCode = errorCode,
+            isActive = isActive,
+            archivedAt = archivedAt,
         ),
         points = history.mapIndexed { index, value -> PricePoint(checkedAt = 1_000L + index, price = value) },
     )
@@ -166,5 +170,51 @@ class ProductListOrderingTest {
         assertEquals(listOf(1L, 2L), sorted.map { it.product.id })
         assertTrue(ProductListOrdering.apply(rows, ProductSort.ADDED, ProductFilter.ALL).isNotEmpty())
         assertFalse(ProductListOrdering.apply(emptyList(), ProductSort.NAME, ProductFilter.PROBLEM).isNotEmpty())
+    }
+
+    @Test
+    fun archivedProductsAreHiddenFromEveryOrdinaryView() {
+        val rows = listOf(
+            row(1, "Аве", price = 100.0),
+            row(2, "Ганнимед", price = 200.0, archivedAt = 10L),
+            row(3, "Сидна", price = null),
+        )
+
+        for (filter in ProductFilter.entries.filter { it != ProductFilter.ARCHIVE }) {
+            val kept = ProductListOrdering.apply(rows, ProductSort.ADDED, filter)
+            assertFalse("архивный товар просочился в фильтр $filter", kept.any { it.product.id == 2L })
+        }
+        // «Товаров: 3» при двух показанных значило бы «куда-то делся один» — счётчик считает
+        // текущий режим, а не всю таблицу.
+        assertEquals(2, ProductListOrdering.countInCurrentView(rows, ProductFilter.ALL))
+    }
+
+    @Test
+    fun archiveViewShowsOnlyArchived() {
+        val rows = listOf(
+            row(1, "Аве", price = 100.0),
+            row(2, "Ганнимед", price = 200.0, archivedAt = 10L),
+        )
+
+        val kept = ProductListOrdering.apply(rows, ProductSort.ADDED, ProductFilter.ARCHIVE)
+
+        assertEquals(listOf(2L), kept.map { it.product.id })
+        assertEquals(1, ProductListOrdering.countInCurrentView(rows, ProductFilter.ARCHIVE))
+    }
+
+    @Test
+    fun problemFilterCoversPausesAndGoneProducts() {
+        val rows = listOf(
+            row(1, "Аве", price = 100.0),
+            row(2, "На паузе", price = 100.0, isActive = false),
+            row(3, "Нет страницы", failures = 1, errorCode = "NOT_FOUND"),
+            row(4, "Всё хорошо", price = 100.0),
+        )
+
+        val kept = ProductListOrdering.apply(rows, ProductSort.ADDED, ProductFilter.PROBLEM)
+
+        // «Нет страницы» попадает и с одним неудачным прогоном: это наблюдение за товаром, а не наш
+        // сбой, и ждать трёх подряд, чтобы показать его человеку, не за чем.
+        assertEquals(listOf(2L, 3L), kept.map { it.product.id })
     }
 }

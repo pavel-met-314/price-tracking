@@ -38,6 +38,10 @@ class ProductRepository(
     suspend fun getActiveProducts(): List<TrackedProduct> =
         productDao.getActiveProducts().map { it.toDomain() }
 
+    /** И архивные тоже — см. комментарий к DAO: этот список про «не плодить дубли», а не про «что проверять». */
+    suspend fun getAllProducts(): List<TrackedProduct> =
+        productDao.getAllProducts().map { it.toDomain() }
+
     suspend fun getProduct(id: Long): TrackedProduct? =
         productDao.getProduct(id)?.toDomain()
 
@@ -53,6 +57,18 @@ class ProductRepository(
 
     suspend fun updateProduct(product: TrackedProduct) {
         productDao.updateProduct(product.toEntity())
+    }
+
+    /**
+     * В архив (`at` != null) или обратно (`at == null`). История цен и сама запись не трогаются:
+     * «разонравилось» и «ошиблись товаром» — разные действия, и второе остаётся отдельной кнопкой.
+     */
+    suspend fun setArchived(productId: Long, at: Long?) {
+        productDao.setArchivedAt(id = productId, archivedAt = at)
+    }
+
+    suspend fun setActive(productId: Long, active: Boolean) {
+        productDao.setActive(id = productId, active = active)
     }
 
     suspend fun deleteProduct(product: TrackedProduct) {

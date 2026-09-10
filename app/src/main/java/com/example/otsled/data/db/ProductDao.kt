@@ -13,8 +13,21 @@ interface ProductDao {
     @Query("SELECT * FROM products ORDER BY id DESC")
     fun observeProducts(): Flow<List<TrackedProductEntity>>
 
-    @Query("SELECT * FROM products WHERE isActive = 1")
+    /**
+     * Товары, которые надо проверять: не в архиве и не на паузе. Архив исключается запросом, а не
+     * фильтром в памяти: иначе список из сорока «архивных» ссылок каждый час жёг бы трафик и
+     * батарею ровно так же, как до архива.
+     */
+    @Query("SELECT * FROM products WHERE isActive = 1 AND archivedAt IS NULL")
     suspend fun getActiveProducts(): List<TrackedProductEntity>
+
+    /**
+     * Все товары, включая архивные и на паузе. Нужен поиску, чтобы он распознавал уже отслеживаемую
+     * страницу: иначе «добавить» архивный товар создал бы дубль и снёс `archivedAt` вместе с
+     * привязанной историей (у Room ключ — URL, REPLACE перечёркивает запись целиком).
+     */
+    @Query("SELECT * FROM products ORDER BY id DESC")
+    suspend fun getAllProducts(): List<TrackedProductEntity>
 
     @Query("SELECT * FROM products WHERE id = :id")
     suspend fun getProduct(id: Long): TrackedProductEntity?
@@ -30,6 +43,14 @@ interface ProductDao {
 
     @Delete
     suspend fun deleteProduct(product: TrackedProductEntity)
+
+    /** null — вернуть из архива. Отдельный запрос, чтобы не перезаписывать цены целиком. */
+    @Query("UPDATE products SET archivedAt = :archivedAt WHERE id = :id")
+    suspend fun setArchivedAt(id: Long, archivedAt: Long?)
+
+    /** Пауза проверок: запись, цены и история остаются на месте, но сеть не тратится. */
+    @Query("UPDATE products SET isActive = :active WHERE id = :id")
+    suspend fun setActive(id: Long, active: Boolean)
 
     /**
      * У утерянного товара цена может остаться «валидной» из старой записи, поэтому при успехе

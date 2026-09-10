@@ -27,6 +27,13 @@ object SiteSearchTracking {
         return result
     }
 
+    /**
+     * id архивных товаров из списка: выдача должна отличать «уже отслеживается» от «уже отслеживается,
+     * но убран в архив». Второе — не отказ добавлять, а подсказка «верни, если передумал».
+     */
+    fun archivedIds(products: List<TrackedProduct>): Set<Long> =
+        products.filter { it.isArchived }.map { it.id }.toSet()
+
     /** id отслеживаемого товара для строки выдачи, или null — если такой товар ещё не добавлен. */
     fun trackedId(hit: SiteSearchHit, tracked: Map<String, Long>): Long? = tracked[canonical(hit.url)]
 
@@ -48,10 +55,11 @@ object SiteSearchTracking {
      * проверок». Без неё «пометка не появилась» неотличимо от «такого товара нет в списке», а
      * разница между ними — только в том, сошлись URL или нет; вот эти URL и показываем.
      */
-    fun report(hits: List<SiteSearchHit>, tracked: Map<String, Long>): String {
+    fun report(hits: List<SiteSearchHit>, tracked: Map<String, Long>, archivedCount: Int = 0): String {
         if (hits.isEmpty()) return ""
         val matched = hits.count { trackedId(it, tracked) != null }
-        val head = "совпало со списком $matched из ${hits.size} (в списке ${tracked.size})"
+        val archiveNote = if (archivedCount > 0) ", в архиве $archivedCount" else ""
+        val head = "совпало со списком $matched из ${hits.size} (в списке ${tracked.size}$archiveNote)"
         if (matched > 0 || tracked.isEmpty()) return head
         return "$head; в выдаче ${cut(canonical(hits.first().url))}, в базе ${cut(tracked.keys.first())}"
     }

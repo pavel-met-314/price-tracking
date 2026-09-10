@@ -14,6 +14,8 @@ data class TrackedProduct(
     val lastErrorCode: String = "",
     val lastErrorMessage: String? = null,
     val consecutiveFailures: Int = 0,
+    /** Когда товар убран в архив; null — отслеживается как обычно. */
+    val archivedAt: Long? = null,
 ) {
     /** Проверка запускалась, но цены получены не были — в списке это надо показать честно. */
     val hasCheckProblem: Boolean
@@ -21,6 +23,10 @@ data class TrackedProduct(
 
     val isBotBlocked: Boolean
         get() = lastErrorCode == ParseResultKind.BOT_CHALLENGE
+
+    /** В архиве — значит не проверяется и в общем списке не участвует. */
+    val isArchived: Boolean
+        get() = archivedAt != null
 }
 
 /** Категории ошибок парсинга; значения совпадают с ParseResult.Kind.name. */
@@ -99,5 +105,8 @@ data class PriceCheckLog(
     companion object {
         const val STATUS_OK = "OK"
         const val STATUS_ERROR = "ERROR"
+
+        /** Не ошибка парсера, а решение приложения: отслеживание товара поставлено на паузу. */
+        const val KIND_PAUSED = "PAUSED"
     }
 }

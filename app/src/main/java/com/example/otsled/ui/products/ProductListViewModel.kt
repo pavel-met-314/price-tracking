@@ -79,7 +79,9 @@ class ProductListViewModel(
     val state: StateFlow<ProductListUiState> = combine(rows, _sort, _filter) { source, sort, filter ->
         ProductListUiState(
             rows = ProductListOrdering.apply(source, sort, filter),
-            totalCount = source.size,
+            // «из N» — про текущий режим: с архивом в общем счёте заголовок врал бы, что
+            // «показано 3 из 40», хотя сорок товаров пользователь сюда не звал.
+            totalCount = ProductListOrdering.countInCurrentView(source, filter),
             sort = sort,
             filter = filter,
         )

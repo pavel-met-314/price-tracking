@@ -20,6 +20,7 @@ fun TrackedProductEntity.toDomain(): TrackedProduct = TrackedProduct(
     lastErrorCode = lastErrorCode,
     lastErrorMessage = lastErrorMessage,
     consecutiveFailures = consecutiveFailures,
+    archivedAt = archivedAt,
 )
 
 fun TrackedProduct.toEntity(): TrackedProductEntity = TrackedProductEntity(
@@ -36,6 +37,7 @@ fun TrackedProduct.toEntity(): TrackedProductEntity = TrackedProductEntity(
     lastErrorCode = lastErrorCode,
     lastErrorMessage = lastErrorMessage,
     consecutiveFailures = consecutiveFailures,
+    archivedAt = archivedAt,
 )
 
 fun ProductVariantEntity.toDomain(): ProductVariant = ProductVariant(

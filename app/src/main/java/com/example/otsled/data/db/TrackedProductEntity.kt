@@ -25,4 +25,7 @@ data class TrackedProductEntity(
     /** Подряд идущие неудачи: по ним UI показывает предупреждение, а WorkManager ретраит. */
     @ColumnInfo(defaultValue = "0")
     val consecutiveFailures: Int = 0,
+    /** Товар убран в архив (null — не архивный). Удалять запись нельзя: на неё опирается
+     * история цен, а «больше не интересно» — не «ошиблись товаром». */
+    val archivedAt: Long? = null,
 )

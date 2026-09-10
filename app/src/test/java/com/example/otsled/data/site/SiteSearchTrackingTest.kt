@@ -105,4 +105,34 @@ class SiteSearchTrackingTest {
 
         assertEquals(3L, SiteSearchTracking.trackedId(hit(page), tracked)!!)
     }
+
+    @Test
+    fun archivedProductsAreStillRecognizedAsTracked() {
+        val products = listOf(
+            product(7, page).copy(archivedAt = 11L),
+            product(8, "https://allureparfum.ru/katalog/other.html"),
+        )
+
+        val archived = SiteSearchTracking.archivedIds(products)
+        val tracked = SiteSearchTracking.trackedIdsByUrl(products)
+
+        // Архив — всё ещё отслеживаемая страница. «Добавить» её заново значило бы затереть archivedAt
+        // и отвязать историю цен (ключ таблицы — URL, REPLACE перечёркивает запись целиком).
+        assertEquals(setOf(7L), archived)
+        assertEquals(7L, SiteSearchTracking.trackedId(hit(page), tracked)!!)
+    }
+
+    @Test
+    fun reportMentionsArchiveOnlyWhenItExists() {
+        val tracked = SiteSearchTracking.trackedIdsByUrl(listOf(product(7, page).copy(archivedAt = 1L)))
+
+        assertEquals(
+            "совпало со списком 1 из 1 (в списке 1, в архиве 1)",
+            SiteSearchTracking.report(listOf(hit(page)), tracked, archivedCount = 1),
+        )
+        assertEquals(
+            "совпало со списком 1 из 1 (в списке 1)",
+            SiteSearchTracking.report(listOf(hit(page)), tracked),
+        )
+    }
 }

@@ -20,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -32,6 +33,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.otsled.R
 import com.example.otsled.domain.model.PriceHistoryEntry
 import com.example.otsled.ui.AppViewModelFactory
+import com.example.otsled.domain.model.ProductStatus
+import com.example.otsled.domain.model.TrackedProduct
+import com.example.otsled.domain.model.isPaused
+import com.example.otsled.domain.model.status
 import com.example.otsled.util.DateFormatter
 import com.example.otsled.util.PriceFormatter
 
@@ -41,7 +46,7 @@ fun ProductDetailScreen(
     viewModelFactory: AppViewModelFactory,
     productId: Long,
     onBack: () -> Unit,
-    onDeleted: () -> Unit,
+    onClosed: () -> Unit,
 ) {
     val viewModel: ProductDetailViewModel = viewModel(
         factory = object : androidx.lifecycle.ViewModelProvider.Factory {
@@ -57,8 +62,8 @@ fun ProductDetailScreen(
     val selectedVariantId by viewModel.selectedVariant.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    LaunchedEffect(uiState.deleted) {
-        if (uiState.deleted) onDeleted()
+    LaunchedEffect(uiState.closed) {
+        if (uiState.closed) onClosed()
     }
 
     Scaffold(
@@ -96,6 +101,7 @@ fun ProductDetailScreen(
                 val current = product!!
                 Column {
                     Text(text = current.url, style = MaterialTheme.typography.bodySmall)
+                    StatusNotice(current)
                     current.targetPrice?.let { target ->
                         Text(
                             text = stringResource(R.string.target_price_label, PriceFormatter.formatPrice(target)),
@@ -138,13 +144,44 @@ fun ProductDetailScreen(
                     ) {
                         Text(stringResource(R.string.check_now))
                     }
+                    // Порядок кнопок — по возрастанию необратимости: архив всегда под рукой,
+                    // «удалить навсегда» отдельным нажатием внизу.
                     OutlinedButton(
-                        onClick = viewModel::deleteProduct,
+                        onClick = {
+                            if (current.isArchived) viewModel.restoreFromArchive() else viewModel.moveToArchive()
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 8.dp),
                     ) {
-                        Text(stringResource(R.string.delete_product))
+                        Text(
+                            stringResource(
+                                if (current.isArchived) R.string.action_restore else R.string.action_archive,
+                            ),
+                        )
+                    }
+                    TextButton(
+                        onClick = viewModel::togglePaused,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                    ) {
+                        Text(
+                            stringResource(
+                                if (current.isPaused) R.string.action_resume else R.string.action_pause,
+                            ),
+                        )
+                    }
+                    TextButton(
+                        onClick = viewModel::deleteProduct,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.action_delete_forever),
+                            color = MaterialTheme.colorScheme.error,
+                        )
                     }
                     uiState.errorMessage?.let { error ->
                         Text(
@@ -201,3 +238,62 @@ private fun HistoryRow(entry: PriceHistoryEntry) {
     }
 }
 
+/**
+ * Что приложение думает о товаре по последним проверкам — на этом экране важно не только «цена
+ * упала», но и «цену мы достать не смогли, потому что …». Подпись исчезает вместе с проблемой:
+ * врать о товаре по сетевому сбою хуже, чем молчать.
+ */
+@Composable
+private fun StatusNotice(product: TrackedProduct) {
+    val lines = buildList {
+        when (product.status) {
+            ProductStatus.OK, ProductStatus.NO_DATA -> Unit
+            ProductStatus.OUT_OF_STOCK -> add(stringResource(R.string.status_out_of_stock))
+            ProductStatus.NOT_FOUND -> add(stringResource(R.string.status_not_found))
+            ProductStatus.PARSE_FAILED -> add(stringResource(R.string.status_parse_failed))
+            ProductStatus.ACCESS_FAILED -> add(
+                if (product.isBotBlocked) {
+                    stringResource(R.string.problem_bot_blocked)
+                } else {
+                    stringResource(R.string.status_access_failed)
+                },
+            )
+        }
+        if (product.status.concernsProduct && product.lastPrice != null) {
+            add(stringResource(R.string.status_stale_price))
+        }
+        if (product.isPaused) {
+            add(
+                if (product.consecutiveFailures >= PAUSE_HINT_AFTER) {
+                    stringResource(R.string.status_paused_auto, product.consecutiveFailures)
+                } else {
+                    stringResource(R.string.status_paused)
+                },
+            )
+        }
+        product.archivedAt?.let { add(stringResource(R.string.status_archived, DateFormatter.format(it))) }
+    }
+    if (lines.isEmpty()) return
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            lines.forEach { line ->
+                Text(
+                    text = line,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (product.status.isProblem) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+        }
+    }
+}
+
+private const val PAUSE_HINT_AFTER = 3

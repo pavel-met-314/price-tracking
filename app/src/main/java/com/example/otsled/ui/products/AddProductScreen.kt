@@ -120,6 +120,7 @@ fun AddProductScreen(
                 onPick = viewModel::useSearchHit,
                 onOpenBrowserCheck = onOpenBrowserCheck,
                 trackedIds = uiState.searchTrackedIds,
+                archivedIds = uiState.searchArchivedIds,
                 onOpenProduct = onOpenProduct,
             )
 
@@ -205,6 +206,8 @@ private fun SearchBlock(
     onOpenBrowserCheck: () -> Unit,
     /** URL строки выдачи -> id товара, который уже отслеживается (пусто, если совпадений нет). */
     trackedIds: Map<String, Long>,
+    /** id из [trackedIds], которые лежат в архиве: подпись и подсказка у них другие. */
+    archivedIds: Set<Long>,
     onOpenProduct: (Long) -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -322,6 +325,7 @@ private fun SearchBlock(
                     SearchHitRow(
                         hit = hit,
                         trackedProductId = trackedIds[hit.url],
+                        trackedIsArchived = trackedIds[hit.url]?.let { archivedIds.contains(it) } == true,
                         onSelect = { onPick(hit) },
                         onOpenProduct = onOpenProduct,
                     )
@@ -341,6 +345,7 @@ private fun SearchBlock(
 private fun SearchHitRow(
     hit: SiteSearchHit,
     trackedProductId: Long?,
+    trackedIsArchived: Boolean = false,
     onSelect: () -> Unit,
     onOpenProduct: (Long) -> Unit,
 ) {
@@ -381,7 +386,11 @@ private fun SearchHitRow(
                 )
                 if (alreadyTracked) {
                     Text(
-                        text = stringResource(R.string.search_tracked_badge),
+                        // Архив — не «уже отслеживается»: товар не проверяется, и молча предложить
+                        // добавить его снова значило бы завести дубль поверх архива.
+                        text = stringResource(
+                            if (trackedIsArchived) R.string.search_tracked_badge_archived else R.string.search_tracked_badge,
+                        ),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.tertiary,
                     )

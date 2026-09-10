@@ -11,6 +11,7 @@ import com.example.otsled.domain.model.PriceCheckLog
 import com.example.otsled.domain.model.PriceHistoryEntry
 import com.example.otsled.domain.model.ProductVariant
 import com.example.otsled.domain.model.TrackedProduct
+import com.example.otsled.domain.model.shouldAutoPauseOnNotFound
 import com.example.otsled.notification.PriceNotificationManager
 
 /** Итог прогона по всем товарам — нужен воркеру, чтобы решить, ретраить ли пакет. */
@@ -43,8 +44,18 @@ class PriceCheckUseCase(
         /** Отдельный тег, чтобы «цель достигнута» не затиралась уведомлением об изменении цены. */
         const val TARGET_NOTIFICATION_TAG = "target-price"
 
+        /** Свой тег: «приостановили» не должно затирать уведомление о цене и наоборот. */
+        const val PAUSE_NOTIFICATION_TAG = "paused"
+
         /** Сколько разрешено проверять цены в одном фоновом цикле. */
         const val MAX_CYCLE_MILLIS = 6 * 60_000L
+
+        /**
+         * После скольких подряд «страница не найдена» отслеживание ставится на паузу. Три — чтобы
+         * разовый 404 во время выгрузки каталога не убивал товар, и чтобы не гонять WebView
+         * по заведомо мёртвой ссылке каждый час.
+         */
+        const val AUTO_PAUSE_AFTER_NOT_FOUND = 3
     }
     suspend fun checkProduct(product: TrackedProduct): ParseResult {
         val normalizedUrl = ProductUrlNormalizer.normalize(product.url) ?: product.url
@@ -158,6 +169,7 @@ class PriceCheckUseCase(
             errorCode = error.kind.name,
             errorMessage = error.message,
         )
+        pauseIfPageIsGone(product, error, now)
         productRepository.logCheck(
             PriceCheckLog(
                 productId = product.id,
@@ -168,6 +180,41 @@ class PriceCheckUseCase(
                 variantsCount = 0,
                 createdAt = now,
             ),
+        )
+    }
+
+    /**
+     * Страницы товара больше нет — повторные проверки такой ссылки только жгут WebView (десятки
+     * секунд на товар) и журнал. Поэтому после [AUTO_PAUSE_AFTER_NOT_FOUND] подряд «не найдено»
+     * отслеживание становится на паузу, а не молча продолжается вечно: решение (удалить, вернуть,
+     * поправить ссылку) за пользователем.
+     *
+     * Сетевые сбои, блокировка и «не распарсилось» сюда не попадают сознательно: это наши проблемы,
+     * а не судьба товара, и ставить из-за них товар «в снятые» значило бы врать.
+     */
+    private suspend fun pauseIfPageIsGone(product: TrackedProduct, error: ParseResult.Error, now: Long) {
+        // Счётчик в базе уже увеличен этим прогоном, а в [product] лежит значение до него.
+        val failures = product.consecutiveFailures + 1
+        if (!shouldAutoPauseOnNotFound(error.kind.name, failures, AUTO_PAUSE_AFTER_NOT_FOUND)) return
+
+        productRepository.setActive(product.id, active = false)
+        val reason = context.getString(R.string.product_paused_message, product.title.ifBlank { product.url }, failures)
+        productRepository.logCheck(
+            PriceCheckLog(
+                productId = product.id,
+                status = PriceCheckLog.STATUS_ERROR,
+                kind = PriceCheckLog.KIND_PAUSED,
+                source = "",
+                message = reason,
+                variantsCount = 0,
+                createdAt = now,
+            ),
+        )
+        notificationManager.showPriceAlert(
+            productId = product.id,
+            title = context.getString(R.string.product_paused_title),
+            message = reason,
+            tag = PAUSE_NOTIFICATION_TAG,
         )
     }
 

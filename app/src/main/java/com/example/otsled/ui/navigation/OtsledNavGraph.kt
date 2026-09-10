@@ -55,7 +55,7 @@ fun OtsledNavGraph(
                 viewModelFactory = viewModelFactory,
                 productId = productId,
                 onBack = { navController.popBackStack() },
-                onDeleted = {
+                onClosed = {
                     navController.popBackStack(Routes.PRODUCT_LIST, inclusive = false)
                 },
             )

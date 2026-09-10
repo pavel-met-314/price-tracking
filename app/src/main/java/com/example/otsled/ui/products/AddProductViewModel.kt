@@ -44,6 +44,8 @@ data class AddProductUiState(
      * повторный наход того же товара не выглядел как «добавьте заново»: вставка с тем же URL
      * затирала бы цель и настройки уведомлений.
      */
+    /** id совпавших товаров, которые лежат в архиве: подпись в выдаче отличается от обычной. */
+    val searchArchivedIds: Set<Long> = emptySet(),
     val searchTrackedIds: Map<String, Long> = emptyMap(),
 )
 
@@ -73,6 +75,7 @@ class AddProductViewModel(
                 searchMessage = null,
                 searchViaWebView = false,
                 searchTrackedIds = emptyMap(),
+                searchArchivedIds = emptySet(),
             )
         }
     }
@@ -100,11 +103,18 @@ class AddProductViewModel(
             logSearchOutcome(query, result)
             // Спрашиваем свой список после поиска, а не до: поиск может длиться десятки секунд,
             // и за это время товар успели удалить или добавить вручную.
-            val tracked = if (result is SiteSearchResult.Success) {
-                SiteSearchTracking.trackedIdsByUrl(repository.getActiveProducts())
+            // Список берём полный (включая архив), а не «активные для проверок»: архивный товар —
+            // всё ещё отслеживаемая страница, и «добавить» его повторно затёр бы archivedAt и
+            // отвязал историю цен (ключ в таблице — URL, REPLACE перечёркивает запись целиком).
+            val products = if (result is SiteSearchResult.Success) {
+                repository.getAllProducts()
             } else {
-                emptyMap()
+                emptyList()
             }
+            val tracked = SiteSearchTracking.trackedIdsByUrl(products)
+            val archived = SiteSearchTracking.archivedIds(products)
+            val hits = (result as? SiteSearchResult.Success)?.hits.orEmpty()
+            val matchedIds = SiteSearchTracking.resolve(hits, tracked)
             _uiState.update { state ->
                 when (result) {
                     is SiteSearchResult.Success -> state.copy(
@@ -114,8 +124,12 @@ class AddProductViewModel(
                         searchViaWebView = result.viaWebView,
                         searchMessage = null,
                         searchRetryable = false,
-                        searchTrackedIds = SiteSearchTracking.resolve(result.hits, tracked),
-                        searchNote = combineNotes(result.note, SiteSearchTracking.report(result.hits, tracked)),
+                        searchTrackedIds = matchedIds,
+                        searchArchivedIds = matchedIds.values.filter { archived.contains(it) }.toSet(),
+                        searchNote = combineNotes(
+                            result.note,
+                            SiteSearchTracking.report(hits, tracked, archived.size),
+                        ),
                     )
                     is SiteSearchResult.Error -> state.copy(
                         isSearching = false,
@@ -125,6 +139,7 @@ class AddProductViewModel(
                         searchMessage = result.message,
                         searchNote = result.note,
                         searchTrackedIds = emptyMap(),
+                        searchArchivedIds = emptySet(),
                         searchRetryable = result.kind == SiteSearchResult.Kind.BOT_CHALLENGE ||
                             result.kind == SiteSearchResult.Kind.NETWORK,
                     )

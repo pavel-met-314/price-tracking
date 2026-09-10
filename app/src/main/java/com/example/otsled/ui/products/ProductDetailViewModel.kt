@@ -27,7 +27,8 @@ data class PriceOverview(
 data class ProductDetailUiState(
     val isChecking: Boolean = false,
     val errorMessage: String? = null,
-    val deleted: Boolean = false,
+    /** Экран закрывают и удаление, и архив: в обоих случаях смотреть здесь больше не на что. */
+    val closed: Boolean = false,
 )
 
 class ProductDetailViewModel(
@@ -85,7 +86,29 @@ class ProductDetailViewModel(
         val current = product.value ?: return
         viewModelScope.launch {
             repository.deleteProduct(current)
-            _uiState.update { it.copy(deleted = true) }
+            _uiState.update { it.copy(closed = true) }
         }
+    }
+
+    /**
+     * Архив вместо удаления: записи, цены и история остаются, проверок нет. Отдельно от паузы —
+     * «надоело» и «посмотрю позже» решают разные вещи, и одно не должно включать другое.
+     */
+    fun moveToArchive() {
+        val current = product.value ?: return
+        viewModelScope.launch {
+            repository.setArchived(current.id, System.currentTimeMillis())
+            _uiState.update { it.copy(closed = true) }
+        }
+    }
+
+    fun restoreFromArchive() {
+        val current = product.value ?: return
+        viewModelScope.launch { repository.setArchived(current.id, at = null) }
+    }
+
+    fun togglePaused() {
+        val current = product.value ?: return
+        viewModelScope.launch { repository.setActive(current.id, active = !current.isActive) }
     }
 }

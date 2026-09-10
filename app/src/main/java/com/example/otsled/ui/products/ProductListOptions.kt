@@ -1,5 +1,8 @@
 package com.example.otsled.ui.products
 
+import com.example.otsled.domain.model.isPaused
+import com.example.otsled.domain.model.status
+
 /** Порядок списка отслеживаемых товаров. */
 enum class ProductSort {
     /** Как добавляли: новые сверху. Ничего не считаем, самый привычный вид. */
@@ -24,6 +27,9 @@ enum class ProductFilter {
     PROBLEM,
     /** Цену ещё не достали — «цена не проверялась» и пустой график. */
     NO_PRICE,
+
+    /** Отдельный режим, а не фильтр по признаку: архивные товары не должны мешаться в основном. */
+    ARCHIVE,
 }
 
 /**
@@ -35,8 +41,21 @@ enum class ProductFilter {
  */
 object ProductListOrdering {
 
+    /**
+     * Архив — противоположный основного режим: в обычном списке архивных не видно вовсе, в архиве
+     * — только они. Правилу два, поэтому он вынесен до остальных фильтров: «ниже цели» внутри
+     * архива бессмысленно, а «архивный» товар в основном списке быть не должен ни при каком
+     * фильтре.
+     */
+    fun inCurrentView(row: ProductListRow, filter: ProductFilter): Boolean =
+        if (filter == ProductFilter.ARCHIVE) row.product.isArchived else !row.product.isArchived
+
+    /** Сколько товаров в текущем режиме — по этому числу заголовок «Показано K из N». */
+    fun countInCurrentView(rows: List<ProductListRow>, filter: ProductFilter): Int =
+        rows.count { inCurrentView(it, filter) }
+
     fun apply(rows: List<ProductListRow>, sort: ProductSort, filter: ProductFilter): List<ProductListRow> {
-        val kept = rows.filter { matches(it, filter) }
+        val kept = rows.filter { inCurrentView(it, filter) }.filter { matches(it, filter) }
         return when (sort) {
             // «Как добавляли» — порядок из базы: id там уже отсортированы DESC.
             ProductSort.ADDED -> kept
@@ -60,7 +79,10 @@ object ProductListOrdering {
         ProductFilter.ALL -> true
         ProductFilter.BELOW_TARGET -> row.isBelowTarget
         ProductFilter.DROPPED -> (row.trendDelta ?: 0.0) < 0.0
-        ProductFilter.PROBLEM -> row.product.hasCheckProblem || row.product.isBotBlocked
+        // «С проблемами» — всё, что требует решения: упорные ошибки, блокировка, пауза и то, что
+        // товар реально исчез с сайта. Архив сюда не входит: там проблем нет, там выбор пользователя.
+        ProductFilter.PROBLEM -> row.product.hasCheckProblem || row.product.isBotBlocked ||
+            row.product.status.isProblem || row.product.isPaused
         ProductFilter.NO_PRICE -> row.product.lastPrice == null
     }
 

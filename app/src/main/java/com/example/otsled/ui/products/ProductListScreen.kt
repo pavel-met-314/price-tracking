@@ -37,6 +37,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.otsled.R
+import com.example.otsled.domain.model.ProductStatus
+import com.example.otsled.domain.model.TrackedProduct
+import com.example.otsled.domain.model.isPaused
+import com.example.otsled.domain.model.status
 import com.example.otsled.ui.AppViewModelFactory
 import com.example.otsled.util.DateFormatter
 import com.example.otsled.util.PriceFormatter
@@ -209,7 +213,33 @@ private fun filterOptions(): List<Pair<ProductFilter, Int>> = listOf(
     ProductFilter.DROPPED to R.string.filter_dropped,
     ProductFilter.PROBLEM to R.string.filter_problem,
     ProductFilter.NO_PRICE to R.string.filter_no_price,
+    ProductFilter.ARCHIVE to R.string.filter_archive,
 )
+
+/**
+ * Подпись статуса товара под ценой.
+ *
+ * `OK` и `NO_DATA` молчат намеренно: «всё хорошо» в списке неинформативно, а «цену ещё не
+ * проверяли» уже сказано строкой цены. Дублировать состояние двумя подписями — способ вырастить
+ * список, в котором никто не читает подписи.
+ */
+@Composable
+private fun TrackedProduct.statusText(): String? = when (status) {
+    ProductStatus.OK, ProductStatus.NO_DATA -> null
+
+    ProductStatus.OUT_OF_STOCK -> stringResource(R.string.status_out_of_stock)
+
+    ProductStatus.NOT_FOUND -> stringResource(R.string.status_not_found)
+
+    // «Не разобрали страницу» показывает счётчик: одна неудача — случайность, три — вёрстка.
+    ProductStatus.PARSE_FAILED -> stringResource(R.string.problem_checks_failed, consecutiveFailures)
+
+    ProductStatus.ACCESS_FAILED -> if (isBotBlocked) {
+        stringResource(R.string.problem_bot_blocked)
+    } else {
+        stringResource(R.string.status_access_failed)
+    }
+}
 
 
 
@@ -249,19 +279,38 @@ private fun ProductCard(
             }
             // Отдельно про проблему: «цена не менялась» и «мы не смогли получить цену» —
             // для пользователя это разные ситуации, молча показывать старую цену нельзя.
-            when {
-                product.isBotBlocked -> Text(
-                    text = stringResource(R.string.problem_bot_blocked),
+            product.statusText()?.let { status ->
+                Text(
+                    text = status,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(top = 4.dp),
                 )
-
-                product.hasCheckProblem -> Text(
-                    text = stringResource(R.string.problem_checks_failed, product.consecutiveFailures),
+            }
+            // Цена есть, а товара на странице нет — показываем цифру, но называем её тем, что она
+            // есть на самом деле: последней известной, а не актуальной.
+            if (product.status.concernsProduct && product.lastPrice != null) {
+                Text(
+                    text = stringResource(R.string.status_stale_price),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(top = 4.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            if (product.isPaused) {
+                Text(
+                    text = stringResource(R.string.status_paused),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            product.archivedAt?.let { archivedAt ->
+                Text(
+                    text = stringResource(R.string.status_archived, DateFormatter.format(archivedAt)),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
                 )
             }
             product.targetPrice?.let { target ->
