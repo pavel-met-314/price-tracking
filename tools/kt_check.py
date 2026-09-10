@@ -94,6 +94,10 @@ def without_strings(src):
     return ''.join(out)
 
 
+COPY_DUP = re.compile(r"\.copy\(([^()]*(?:\([^()]*\)[^()]*)*)\)", re.S)
+NAMED_ARG = re.compile(r"^\s*(\w+) =", re.M)
+
+
 def check(path):
     src = open(path, encoding='utf-8').read()
     problems = []
@@ -110,6 +114,14 @@ def check(path):
         a, b = code.count(opener), code.count(closer)
         if a != b:
             problems.append('%s=%d %s=%d' % (opener, a, closer, b))
+
+    # Один именованный аргумент, переданный дважды в .copy(...) — Kotlin считает это ошибкой,
+    # а глазами такой дубль в длинном списке полей не виден.
+    for match in COPY_DUP.finditer(src):
+        names = NAMED_ARG.findall(match.group(1))
+        for name in sorted({n for n in names if names.count(n) > 1}):
+            line = src[:match.start()].count('\n') + 1
+            problems.append('строка %d: .copy(... %s =) повторяется' % (line, name))
 
     # Регулярки с кириллицей: ищем строки с IGNORE_CASE и с русскими буквами в шаблоне.
     for match in re.finditer(r'Regex\((.{0,400}?)\)\n?', src, re.S):

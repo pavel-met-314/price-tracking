@@ -113,7 +113,6 @@ class AddProductViewModel(
                         searchHits = result.hits,
                         searchViaWebView = result.viaWebView,
                         searchMessage = null,
-                        searchNote = result.note,
                         searchRetryable = false,
                         searchTrackedIds = SiteSearchTracking.resolve(result.hits, tracked),
                         searchNote = combineNotes(result.note, SiteSearchTracking.report(result.hits, tracked)),
