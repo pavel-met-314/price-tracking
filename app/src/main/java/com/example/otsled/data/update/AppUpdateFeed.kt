@@ -39,7 +39,12 @@ object AppUpdateFeed {
         // Ссылку ищем только внутри «assets»: иначе первое совпадение пришлось бы на url'ы самого
         // релиза, а это не файл.
         val assets = json.substringAfter(ASSETS_KEY, "")
-        val apkUrl = APK_URL_REGEX.find(assets)?.groupValues?.get(1)?.unescape() ?: return null
+        val urls = APK_URL_REGEX.findAll(assets).map { it.groupValues[1].unescape() }.toList()
+        // В релизе может лежать не один APK (например, вместе с release-сборкой): берём свой,
+        // а если имени не совпало — первый, чтобы не остаться вовсе без обновления.
+        val apkUrl = urls.firstOrNull { it.substringAfterLast('/').equals(APK_ASSET, ignoreCase = true) }
+            ?: urls.firstOrNull()
+            ?: return null
         // Заголовок релиза ищем после «tag_name»: до него идёт объект author, у которого тоже есть
         // «name» — имя разработчика, а не название сборки.
         val title = NAME_REGEX.find(json.substringAfter(TAG_KEY, json))

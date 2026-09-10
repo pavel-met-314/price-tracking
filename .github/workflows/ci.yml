@@ -172,18 +172,29 @@ jobs:
           fi
           cp "$apk" /tmp/app-debug.apk
           version=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' app/build.gradle.kts | head -1)
-          if [ -z "$version" ]; then version="?"; fi
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+(\.[0-9]+)*$'; then version="?"; fi
+          # Кроме «всегда последней» ссылки держим именованный ассет: его не перезапишет следующий
+          # прогон, и конкретную сборку можно поставить позже. Для самообновления это решающе —
+          # чтобы увидеть «доступна 1.4», надо уметь остаться на 1.3.
+          assets="/tmp/app-debug.apk"
+          if [ "$version" != "?" ]; then
+            cp "$apk" "/tmp/app-debug-$version.apk"
+            assets="/tmp/app-debug.apk /tmp/app-debug-$version.apk"
+          fi
           notes=/tmp/release-notes.md
           {
             printf 'Последняя debug-сборка: %s, коммит `%s`.\n\n' "$version" "${GITHUB_SHA:0:7}"
             printf 'Как поставить: скачать файл, открыть, при запросе разрешить установку этому приложению — разрешение выдаётся один раз.\n'
+            if [ "$version" != "?" ]; then
+              printf 'Именно эта версия, её не перезапишет следующий прогон: https://github.com/%s/releases/download/latest/app-debug-%s.apk\n' "$GITHUB_REPOSITORY" "$version"
+            fi
             printf 'Обновление ставится поверх: все прогоны подписывают одним ключом app/debug.keystore.\n'
           } > "$notes"
           if gh release view latest >/dev/null 2>&1; then
             gh release edit latest --title "Последняя сборка ($version)" --notes-file "$notes"
-            gh release upload latest /tmp/app-debug.apk --clobber
+            gh release upload latest $assets --clobber
           else
-            gh release create latest /tmp/app-debug.apk \
+            gh release create latest $assets \
               --title "Последняя сборка ($version)" --notes-file "$notes" --target "$GITHUB_SHA"
           fi
           echo "::notice::APK: https://github.com/$GITHUB_REPOSITORY/releases/download/latest/app-debug.apk"

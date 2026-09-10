@@ -92,6 +92,28 @@ class AppUpdateFeedTest {
     }
 
     @Test
+    fun severalApksDoNotPickTheWrongOne() {
+        // JSON собран склейкой: вложенный сырой литерал с кавычками внутри читается хуже, чем
+        // этот список полей, а проверять надо именно порядок ассетов.
+        val q = "\""
+        fun field(key: String, value: String) = q + key + q + ": " + q + value + q
+        val twoAssets = "{" +
+            field("tag_name", "latest") + ", " +
+            field("name", "Сборка (1.5)") + ", " +
+            q + "assets" + q + ": [" +
+            "{" + field("name", "app-release.apk") + ", " +
+            field("browser_download_url", "https://example.com/app-release.apk") + "}, " +
+            "{" + field("name", "app-debug.apk") + ", " +
+            field("browser_download_url", "https://example.com/app-debug.apk") + "}" + "]}"
+
+        val info = AppUpdateFeed.parseRelease(twoAssets)!!
+
+        // Первый APK в списке — чужой (release-сборка); взять его значило бы предложить не то.
+        assertEquals("https://example.com/app-debug.apk", info.apkUrl)
+        assertEquals("1.5", info.versionName)
+    }
+
+    @Test
     fun versionCompareIsNumericBySegments() {
         assertTrue(AppUpdateFeed.isNewer("1.2", "1.3"))
         // Ровно то, где сравнивание строк врёт: «1.10» лексикографически меньше «1.9».
