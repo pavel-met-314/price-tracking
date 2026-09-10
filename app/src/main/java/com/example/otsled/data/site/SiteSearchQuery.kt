@@ -225,8 +225,11 @@ object SiteSearchQuery {
             .take(limit.coerceAtLeast(1))
 
         return SiteSearchExtraction(
+            // Считаем от того, что реально осталось: при клапане («совпадений нет — оставляем всё»)
+            // kept == all, и «отсеяно 0» — единственный честный отчёт. Иначе диагностика врёт,
+            // будто фильтр выбросил половину выдачи.
             hits = hits,
-            offTopic = if (tokens.isEmpty()) 0 else all.size - matched.size,
+            offTopic = all.size - kept.size,
             seen = all.size,
         )
     }
