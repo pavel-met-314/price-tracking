@@ -261,57 +261,14 @@ private fun UpdateCard(
                         .padding(top = 8.dp),
                 )
             }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                when (state.stage) {
-                    UpdateStage.AVAILABLE -> Button(
-                        onClick = onDownload,
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text(stringResource(R.string.update_download, state.release?.versionName ?: ""))
-                    }
+            UpdateActions(
+                state = state,
+                onCheck = onCheck,
+                onDownload = onDownload,
+                onInstall = onInstall,
+                onOpenPermission = onOpenPermission,
+            )
 
-                    UpdateStage.READY -> Button(
-                        onClick = onInstall,
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text(stringResource(R.string.update_install))
-                    }
-
-                    UpdateStage.NEEDS_PERMISSION -> {
-                        Button(onClick = onOpenPermission, modifier = Modifier.weight(1f)) {
-                            Text(stringResource(R.string.update_open_permission))
-                        }
-                        OutlinedButton(onClick = onInstall, modifier = Modifier.weight(1f)) {
-                            Text(stringResource(R.string.update_install))
-                        }
-                    }
-
-                    UpdateStage.DOWNLOADING -> Button(
-                        onClick = onDownload,
-                        enabled = false,
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text(stringResource(R.string.update_checking))
-                    }
-
-                    else -> Button(
-                        onClick = onCheck,
-                        enabled = state.stage != UpdateStage.CHECKING,
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text(
-                            stringResource(
-                                if (state.stage == UpdateStage.CHECKING) R.string.update_checking else R.string.update_check,
-                            ),
-                        )
-                    }
-                }
-            }
             Text(
                 text = stringResource(R.string.update_desc),
                 style = MaterialTheme.typography.labelSmall,
@@ -339,3 +296,92 @@ private fun updateStatusText(state: UpdateUiState): String {
         UpdateStage.FAILED -> stringResource(R.string.update_failed, state.message ?: "")
     }
 }
+/**
+ * Кнопка в карточке одна, но на разных этапах она означает разное: «проверить», «скачать»,
+ * «установить». В магазинной сборке остаётся только проверка — менять себе APK самой себе она не
+ * должна, и прятать это в «ошибку скачивания» честнее, чем показывать кнопку, которая не сработает.
+ */
+@Composable
+private fun UpdateActions(
+    state: UpdateUiState,
+    onCheck: () -> Unit,
+    onDownload: () -> Unit,
+    onInstall: () -> Unit,
+    onOpenPermission: () -> Unit,
+) {
+    if (!state.canInstall) {
+        Button(
+            onClick = onCheck,
+            enabled = state.stage != UpdateStage.CHECKING,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+        ) {
+            Text(
+                stringResource(
+                    if (state.stage == UpdateStage.CHECKING) R.string.update_checking else R.string.update_check,
+                ),
+            )
+        }
+        Text(
+            text = stringResource(R.string.update_store_note),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        return
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        when (state.stage) {
+            UpdateStage.AVAILABLE -> Button(
+                onClick = onDownload,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(stringResource(R.string.update_download, state.release?.versionName ?: ""))
+            }
+
+            UpdateStage.READY -> Button(
+                onClick = onInstall,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(stringResource(R.string.update_install))
+            }
+
+            UpdateStage.NEEDS_PERMISSION -> {
+                Button(onClick = onOpenPermission, modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.update_open_permission))
+                }
+                OutlinedButton(onClick = onInstall, modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.update_install))
+                }
+            }
+
+            UpdateStage.DOWNLOADING -> Button(
+                onClick = onDownload,
+                enabled = false,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(stringResource(R.string.update_checking))
+            }
+
+            else -> Button(
+                onClick = onCheck,
+                enabled = state.stage != UpdateStage.CHECKING,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(
+                    stringResource(
+                        if (state.stage == UpdateStage.CHECKING) R.string.update_checking else R.string.update_check,
+                    ),
+                )
+            }
+        }
+    }
+}
+

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Магазинная сборка не устанавливает обновления сама: правило площадок — обновления приходят из
+  магазина. Убираем разрешение на уровне манифеста, а не только кнопки в UI: тогда у проверяющего
+  (и у любого, кто распакует APK) не возникает вопроса, зачем приложению право ставить APK из
+  браузера. Сам код проверки обновлений остаётся: он смотрит на признак debug-сборки и в release
+  только сообщает, вышла ли новая версия.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission
+        android:name="android.permission.REQUEST_INSTALL_PACKAGES"
+        tools:node="remove" />
+
+</manifest>

@@ -34,6 +34,8 @@ data class UpdateUiState(
     val stage: UpdateStage = UpdateStage.IDLE,
     val release: AppUpdateFeed.ReleaseInfo? = null,
     val localVersion: String? = null,
+    /** false у магазинной сборки: обновлять себя ей не положено, проверка остаётся справочной. */
+    val canInstall: Boolean = true,
     /** Доля скачивания; null — когда сервер не сообщил длину (тогда прогресс не врал бы о 0%). */
     val progress: Float? = null,
     val message: String? = null,
@@ -57,7 +59,9 @@ class SettingsViewModel(
 
     private val updateChecker: UpdateChecker = container.updateChecker
 
-    private val _update = MutableStateFlow(UpdateUiState())
+    private val _update = MutableStateFlow(
+        UpdateUiState(canInstall = container.updateChecker.canInstallUpdates),
+    )
     val update: StateFlow<UpdateUiState> = _update.asStateFlow()
 
     /**

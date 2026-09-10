@@ -2,6 +2,7 @@ package com.example.otsled.data.update
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -142,5 +143,47 @@ class AppUpdateFeedTest {
             AppUpdateFeed.LATEST_RELEASE_API,
         )
         assertEquals("app-debug.apk", AppUpdateFeed.APK_ASSET)
+    }
+
+    @Test
+    fun assetNameFollowsBuildType() {
+        assertEquals("app-debug.apk", AppUpdateFeed.apkAssetFor(debuggable = true))
+        assertEquals("app-release.apk", AppUpdateFeed.apkAssetFor(debuggable = false))
+    }
+
+    @Test
+    fun debugBuildAcceptsAnyApkOfTheRelease() {
+        // Прошим app-debug.apk, а в релизе только app-release.apk: совпадения нет, но запасной
+        // путь разрешён — все debug-сборки подписаны одним ключом из репозитория, и перепутать
+        // файлы между собой не страшно.
+        val json = releaseWithApkNamed("app-release.apk")
+
+        val info = AppUpdateFeed.parseRelease(json, AppUpdateFeed.APK_ASSET_DEBUG, allowAnyApkFallback = true)!!
+
+        assertEquals("https://example.com/app-release.apk", info.apkUrl)
+        assertEquals("app-release.apk", info.assetName)
+    }
+
+    @Test
+    fun storeBuildRefusesForeignApk() {
+        // Магазинной сборке debug-APK поставить нельзя: подписи разные, установщик откажет.
+        // Честнее «в релизе нет app-release.apk», чем кнопка, которая гарантированно падает.
+        val foreign = releaseWithApkNamed("app-debug.apk")
+
+        assertNull(
+            AppUpdateFeed.parseRelease(foreign, AppUpdateFeed.APK_ASSET_RELEASE, allowAnyApkFallback = false),
+        )
+        assertNotNull(
+            AppUpdateFeed.parseRelease(foreign, AppUpdateFeed.APK_ASSET_RELEASE, allowAnyApkFallback = true),
+        )
+    }
+
+    private fun releaseWithApkNamed(fileName: String): String {
+        val q = "\""
+        fun field(key: String, value: String) = q + key + q + ": " + q + value + q
+        return "{" +
+            field("tag_name", "latest") + ", " +
+            field("name", "Сборка (1.6)") + ", " +
+            q + "assets" + q + ": [ {" + field("browser_download_url", "https://example.com/$fileName") + "} ]}"
     }
 }

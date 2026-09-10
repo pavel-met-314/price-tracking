@@ -84,6 +84,8 @@ object ProductListOrdering {
         ProductFilter.PROBLEM -> row.product.hasCheckProblem || row.product.isBotBlocked ||
             row.product.status.isProblem || row.product.isPaused
         ProductFilter.NO_PRICE -> row.product.lastPrice == null
+        // В архиве дополнительных условий нет: сам режим уже отделил архивные строки выше.
+        ProductFilter.ARCHIVE -> true
     }
 
     private val ProductListRow.price: Double?

@@ -15,8 +15,8 @@ android {
         applicationId = "com.example.otsled"
         minSdk = 24
         targetSdk = 36
-        versionCode = 6
-        versionName = "1.5"
+        versionCode = 7
+        versionName = "1.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -35,6 +35,25 @@ android {
             keyPassword = "android"
             storeType = "PKCS12"
         }
+
+        // Release-ключ в репозиторий не кладём никогда: он даёт право выпускать обновления от имени
+        // приложения. Путь и пароли приходят из окружения CI (секреты репозитория) либо из
+        // локального `gradle.properties`, которого в git нет. Если ключа нет — release собирается
+        // неподписанным: это лучше, чем подписать сборку чужим ключом и потерять возможность
+        // обновлять установленную версию.
+        val releaseStoreFile = System.getenv("OTSLED_RELEASE_STORE_FILE")?.takeIf { it.isNotBlank() }
+            ?: providers.gradleProperty("otsled.release.storeFile").orNull
+        if (releaseStoreFile != null && file(releaseStoreFile).isFile) {
+            create("release") {
+                storeFile = file(releaseStoreFile)
+                storePassword = System.getenv("OTSLED_RELEASE_STORE_PASSWORD")
+                    ?: providers.gradleProperty("otsled.release.storePassword").orNull
+                keyAlias = System.getenv("OTSLED_RELEASE_KEY_ALIAS")
+                    ?: providers.gradleProperty("otsled.release.keyAlias").orNull
+                keyPassword = System.getenv("OTSLED_RELEASE_KEY_PASSWORD")
+                    ?: providers.gradleProperty("otsled.release.keyPassword").orNull
+            }
+        }
     }
 
     buildTypes {
@@ -44,6 +63,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Ключа может не быть (форк, локальная сборка без секретов) — тогда сборка выходит
+            // неподписанной, и падать из-за этого не нужно: debug-путь от этого не зависит.
+            signingConfigs.findByName("release")?.let { signingConfig = it }
         }
     }
     compileOptions {
@@ -55,6 +77,11 @@ android {
     }
     buildFeatures {
         compose = true
+    }
+    lint {
+        // assembleRelease не должен падать на предупреждениях стиля: они не мешают ни установке,
+        // ни проверке подписи, а первый релиз из-за них пришлось бы разбирать вслепую.
+        checkReleaseBuilds = false
     }
 }
 

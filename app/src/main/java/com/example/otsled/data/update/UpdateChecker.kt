@@ -2,6 +2,7 @@ package com.example.otsled.data.update
 
 import android.content.Context
 import com.example.otsled.data.update.AppUpdateFeed.ReleaseInfo
+import com.example.otsled.util.AppBuildInfo
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
@@ -25,6 +26,18 @@ class UpdateChecker(
     private val client: OkHttpClient = defaultClient(),
 ) {
 
+    /**
+     * Может ли эта сборка ставить себе обновления сама. Магазинная сборка обновляется магазином, и
+     * лезть к системному установщику для неё — обход правил площадки; поэтому проверка обновлений в
+     * ней остаётся справочной, а кнопки скачивания и установки исчезают.
+     */
+    val canInstallUpdates: Boolean
+        get() = AppBuildInfo.isDebuggable(context)
+
+    /** Какой файл релиза считать своим: у debug и release-сборок разные подписи. */
+    private val assetName: String
+        get() = AppUpdateFeed.apkAssetFor(AppBuildInfo.isDebuggable(context))
+
     /** Что ответил GitHub про последний релиз, или причина, по которой он не ответил. */
     suspend fun fetchLatestRelease(): Result<ReleaseInfo> = withContext(Dispatchers.IO) {
         runCatching {
@@ -36,8 +49,12 @@ class UpdateChecker(
             client.newCall(request).execute().use { response ->
                 val body = response.body?.string()
                 if (!response.isSuccessful) throw IOException("GitHub ответил ${response.code}")
-                AppUpdateFeed.parseRelease(body) ?: throw IOException(
-                    "в последнем релизе нет APK с версией — проверь, что CI выложил $APK_NAME",
+                AppUpdateFeed.parseRelease(
+                    json = body,
+                    assetName = assetName,
+                    allowAnyApkFallback = canInstallUpdates,
+                ) ?: throw IOException(
+                    "в последнем релизе нет $assetName с версией — проверь, что CI его выложил",
                 )
             }
         }
@@ -54,10 +71,12 @@ class UpdateChecker(
         runCatching {
             val dir = File(context.cacheDir, APK_DIR)
             if (!dir.exists() && !dir.mkdirs()) throw IOException("не удалось создать папку кэша")
-            val target = File(dir, APK_NAME)
-            // Неудалившийся старый файл опаснее лишнего гигабайта: установщик взял бы прошлую
-            // версию и показал бы «успех» на несуществующем обновлении.
-            if (target.exists() && !target.delete()) throw IOException("старый файл установки занят")
+            // Папку чистим целиком, а не только свой файл: APK, оставшийся от сборки другого типа,
+            // — это готовый «успех» установки не того файла.
+            dir.listFiles()?.forEach { stale ->
+                if (!stale.delete()) throw IOException("не удалось очистить ${stale.name}")
+            }
+            val target = File(dir, info.assetName)
 
             val request = Request.Builder().url(info.apkUrl).header("User-Agent", USER_AGENT).build()
             // Счётчик живёт вне `use`: после закрытия ответа он ещё нужен для проверки размера.
@@ -99,18 +118,24 @@ class UpdateChecker(
         else -> error.message ?: error.javaClass.simpleName
     }
 
-    /** Устанавливать можно только по тапу пользователя: файл лежит в кэше, путь наружу закрыт. */
-    fun downloadedApk(): File? = File(context.cacheDir, APK_DIR).let { dir ->
-        File(dir, APK_NAME).takeIf { it.exists() && it.length() > MIN_APK_BYTES }
-    }
+    /**
+     * Скачанный APK, если он ещё в кэше. Ищем любой `.apk` в папке обновлений, а не файл по имени:
+     * система могла почистить кэш между этапами, и предлагать установщику несуществующий путь
+     * нельзя — на тапе он бы просто сообщил об ошибке без причины.
+     */
+    fun downloadedApk(): File? = File(context.cacheDir, APK_DIR)
+        .listFiles { file -> file.name.endsWith(".apk") }
+        ?.filter { it.length() > MIN_APK_BYTES }
+        ?.maxByOrNull { it.lastModified() }
 
     fun forgetDownload() {
-        runCatching { downloadedApk()?.delete() }
+        runCatching {
+            File(context.cacheDir, APK_DIR).listFiles()?.forEach { file -> runCatching { file.delete() } }
+        }
     }
 
     companion object {
         const val APK_DIR = "updates"
-        const val APK_NAME = "app-debug.apk"
         private const val USER_AGENT = "Otsled-update-check"
         private const val MIN_APK_BYTES = 200_000L
         private const val BUFFER_SIZE = 32 * 1024

@@ -12,7 +12,15 @@ object AppUpdateFeed {
 
     const val REPO = "pavel-met-314/price-tracking"
     const val LATEST_RELEASE_API = "https://api.github.com/repos/$REPO/releases/latest"
-    const val APK_ASSET = "app-debug.apk"
+    /** Как называется APK в релизе для debug- и для магазинной сборки. */
+    const val APK_ASSET_DEBUG = "app-debug.apk"
+    const val APK_ASSET_RELEASE = "app-release.apk"
+
+    /** Прежнее имя: debug-сборка — то, что приложение носило всегда. */
+    const val APK_ASSET = APK_ASSET_DEBUG
+
+    /** Что за файл искать в релизе: подписи у магазинной и debug-сборки разные. */
+    fun apkAssetFor(debuggable: Boolean): String = if (debuggable) APK_ASSET_DEBUG else APK_ASSET_RELEASE
 
     /** Ключи JSON-ответа, от которых зависит, где искать заголовок и ассеты. */
     private const val ASSETS_KEY = "\"assets\""
@@ -33,7 +41,11 @@ object AppUpdateFeed {
      * «не удалось проверить», а не «обновлений нет»: молчаливое «всё актуально» при сломанном
      * парсере — худший из возможных ответов, пользователь перестает доверять проверке.
      */
-    fun parseRelease(json: String?): ReleaseInfo? {
+    fun parseRelease(
+        json: String?,
+        assetName: String = APK_ASSET_DEBUG,
+        allowAnyApkFallback: Boolean = true,
+    ): ReleaseInfo? {
         if (json.isNullOrBlank()) return null
 
         // Ссылку ищем только внутри «assets»: иначе первое совпадение пришлось бы на url'ы самого
@@ -42,16 +54,22 @@ object AppUpdateFeed {
         val urls = APK_URL_REGEX.findAll(assets).map { it.groupValues[1].unescape() }.toList()
         // В релизе может лежать не один APK (например, вместе с release-сборкой): берём свой,
         // а если имени не совпало — первый, чтобы не остаться вовсе без обновления.
-        val apkUrl = urls.firstOrNull { it.substringAfterLast('/').equals(APK_ASSET, ignoreCase = true) }
-            ?: urls.firstOrNull()
-            ?: return null
+        val wanted = urls.firstOrNull { it.substringAfterLast('/').equals(assetName, ignoreCase = true) }
+        // Подставлять «любой .apk» можно только debug-сборке: магазинной поставить чужой файл нельзя
+        // (другая подпись), и честнее сказать «не нашёл», чем предложить установку, которая упадёт.
+        val apkUrl = wanted ?: urls.firstOrNull()?.takeIf { allowAnyApkFallback } ?: return null
         // Заголовок релиза ищем после «tag_name»: до него идёт объект author, у которого тоже есть
         // «name» — имя разработчика, а не название сборки.
         val title = NAME_REGEX.find(json.substringAfter(TAG_KEY, json))
             ?.groupValues?.get(1)?.unescape()
         val version = title?.let { VERSION_REGEX.find(it)?.groupValues?.get(1) } ?: return null
 
-        return ReleaseInfo(versionName = version, apkUrl = apkUrl, title = title)
+        return ReleaseInfo(
+            versionName = version,
+            apkUrl = apkUrl,
+            title = title,
+            assetName = apkUrl.substringAfterLast('/').substringBefore('?'),
+        )
     }
 
     /**
@@ -85,5 +103,7 @@ object AppUpdateFeed {
         val versionName: String,
         val apkUrl: String,
         val title: String? = null,
+        /** Имя файла в релизе: по нему и называем файл в кэше, чтобы не путать сборки между собой. */
+        val assetName: String = APK_ASSET,
     )
 }
