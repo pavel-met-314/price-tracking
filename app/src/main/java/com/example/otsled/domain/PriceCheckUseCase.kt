@@ -146,7 +146,7 @@ class PriceCheckUseCase(
                 if (plan.fits <= 0) {
                     skipped = products.size - index
                     ManualCheckState.advance(ManualCheckProgress(done = index, total = products.size, deferred = skipped))
-                    return@forEach
+                    return@forEachIndexed
                 }
 
                 val checkStartedAt = System.currentTimeMillis()

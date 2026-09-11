@@ -34,9 +34,7 @@ import com.example.otsled.R
 import com.example.otsled.domain.model.PriceHistoryEntry
 import com.example.otsled.ui.AppViewModelFactory
 import com.example.otsled.domain.model.ProductStatus
-import com.example.otsled.domain.LayoutChangeDetection
 import com.example.otsled.domain.model.TrackedProduct
-import com.example.otsled.domain.partRes
 import com.example.otsled.domain.model.isPaused
 import com.example.otsled.domain.model.status
 import com.example.otsled.util.DateFormatter
@@ -285,9 +283,7 @@ private fun StatusNotice(product: TrackedProduct) {
     // не все. Молчать об этом нельзя: «цена не изменилась» и «мы больше ничего не видим» — разные
     // новости, и различать их должен человек, а не гадать по пустому графику.
     if (product.hasLayoutSuspicion) {
-        val parts = LayoutChangeDetection.parseNote(product.layoutNote)
-            .joinToString(", ") { regression -> stringResource(regression.partRes()) }
-        lines += stringResource(R.string.problem_layout_suspicion, parts)
+        lines += layoutSuspicionText(product.layoutNote)
     }
     if (!product.titleOverride.isNullOrBlank()) {
         lines += stringResource(R.string.status_title_override)

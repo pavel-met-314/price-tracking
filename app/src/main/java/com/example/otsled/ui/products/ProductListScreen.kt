@@ -40,10 +40,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.otsled.R
-import com.example.otsled.domain.LayoutChangeDetection
 import com.example.otsled.domain.ManualCheckState
 import com.example.otsled.domain.VariantPriceChange
-import com.example.otsled.domain.partRes
 import com.example.otsled.service.PriceCheckForegroundService
 import com.example.otsled.domain.model.ProductStatus
 import com.example.otsled.domain.model.TrackedProduct
@@ -378,11 +376,7 @@ private fun ProductCard(
             }
             if (product.hasLayoutSuspicion) {
                 Text(
-                    text = stringResource(
-                        R.string.problem_layout_suspicion,
-                        LayoutChangeDetection.parseNote(product.layoutNote)
-                            .joinToString(", ") { regression -> stringResource(regression.partRes()) },
-                    ),
+                    text = layoutSuspicionText(product.layoutNote),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(top = 4.dp),

@@ -60,14 +60,14 @@ class DroppedPriceWidget : AppWidgetProvider() {
 
         if (model.isEmpty) {
             rows.setViewVisibility(R.id.widget_empty, View.VISIBLE)
-            rows.setText(R.id.widget_empty, context.getString(R.string.widget_empty))
+            rows.setTextViewText(R.id.widget_empty, context.getString(R.string.widget_empty))
         } else {
             rows.setViewVisibility(R.id.widget_empty, View.GONE)
             model.rows.forEach { row ->
                 val line = RemoteViews(context.packageName, R.layout.widget_price_row)
-                line.setText(R.id.widget_row_title, row.title)
-                line.setText(R.id.widget_row_delta, deltaLine(context, row))
-                line.setText(R.id.widget_row_price, format(row.price))
+                line.setTextViewText(R.id.widget_row_title, row.title)
+                line.setTextViewText(R.id.widget_row_delta, deltaLine(context, row))
+                line.setTextViewText(R.id.widget_row_price, format(row.price))
                 // Тап по строке ведёт в карточку: «подешевело» без возможности посмотреть детали —
                 // это дразнилка, а не инструмент.
                 line.setOnClickPendingIntent(R.id.widget_row, openProduct(context, row.productId))
@@ -75,7 +75,7 @@ class DroppedPriceWidget : AppWidgetProvider() {
             }
             if (model.hiddenCount > 0) {
                 rows.setViewVisibility(R.id.widget_more, View.VISIBLE)
-                rows.setText(R.id.widget_more, context.getString(R.string.widget_more, model.hiddenCount))
+                rows.setTextViewText(R.id.widget_more, context.getString(R.string.widget_more, model.hiddenCount))
             } else {
                 rows.setViewVisibility(R.id.widget_more, View.GONE)
             }
