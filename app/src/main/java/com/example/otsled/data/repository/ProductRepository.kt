@@ -1,7 +1,17 @@
 package com.example.otsled.data.repository
 
+import com.example.otsled.data.db.PriceHistoryEntryEntity
 import com.example.otsled.data.db.ProductDao
+import com.example.otsled.data.db.ProductVariantEntity
+import com.example.otsled.data.db.TrackedProductEntity
 import com.example.otsled.data.parser.ParsedProductVariant
+import com.example.otsled.domain.Backup
+import com.example.otsled.domain.BackupItemAction
+import com.example.otsled.domain.BackupMerge
+import com.example.otsled.domain.BackupHistoryRow
+import com.example.otsled.domain.BackupPlan
+import com.example.otsled.domain.BackupVariantRow
+import com.example.otsled.domain.ProductEdit
 import com.example.otsled.domain.model.PriceCheckLog
 import com.example.otsled.domain.model.PriceHistoryEntry
 import com.example.otsled.domain.model.ProductVariant
@@ -137,6 +147,159 @@ class ProductRepository(
     suspend fun logCheck(entry: PriceCheckLog) {
         productDao.insertLog(entry.toEntity())
         productDao.pruneLog(LOG_LIMIT)
+    }
+
+
+    /**
+     * Ручная правка товара. При смене ссылки обнуляем цену и убираем варианты с историей:
+     * «цена от» и график, построенные по старой странице, враньё про новую — ровно тот же класс
+     * ошибки, что и разные объёмы на одной оси.
+     */
+    suspend fun applyEdit(productId: Long, edit: ProductEdit) {
+        val current = productDao.getProduct(productId)
+        productDao.updateEditableFields(
+            id = productId,
+            url = edit.url,
+            titleOverride = edit.titleOverride,
+            targetPrice = edit.targetPrice,
+            notifyAnyChange = edit.notifyOnAnyChange,
+            notifyTargetReached = edit.notifyOnTargetReached,
+            lastPrice = if (edit.pageChanged) null else current?.lastPrice,
+        )
+        if (edit.pageChanged) {
+            productDao.deleteVariantsForProduct(productId)
+            productDao.deleteHistoryForProduct(productId)
+        }
+    }
+
+    /** Отпечаток разметки и подозрение на её смену — см. domain/LayoutChangeDetection. */
+    suspend fun setLayoutInfo(productId: Long, fingerprint: String?, note: String) {
+        productDao.setLayoutInfo(id = productId, fingerprint = fingerprint, note = note)
+    }
+
+    // ---------- выборки для виджета (синхронные: у AppWidgetProvider нет корутины) ----------
+
+    fun getActiveProductsBlocking(): List<TrackedProduct> =
+        productDao.getActiveProductsBlocking().map { it.toDomain() }
+
+    fun getHistoryForProductsBlocking(ids: List<Long>): List<PriceHistoryEntry> =
+        if (ids.isEmpty()) emptyList() else productDao.getHistoryForProductsBlocking(ids).map { it.toDomain() }
+
+    // ---------- резервная копия ----------
+
+    suspend fun exportSnapshot(): Triple<List<TrackedProduct>, List<ProductVariant>, List<PriceHistoryEntry>> =
+        Triple(
+            productDao.getAllProducts().map { it.toDomain() },
+            productDao.getAllVariantsBlocking().map { it.toDomain() },
+            productDao.getAllHistoryBlocking().map { it.toDomain() },
+        )
+
+    suspend fun backupPlan(backup: Backup): BackupPlan =
+        BackupMerge.plan(productDao.getAllProducts().map { it.url }, backup)
+
+    /**
+     * Импорт по плану. Существующий товар обновляется по первичному ключу, а не REPLACE: у
+     * `price_history` ключ — `productId` с каскадом, и замена строки с новым id молча стёрла бы
+     * всю историю цен, которую копия как раз и пришла спасать.
+     */
+    suspend fun importBackup(backup: Backup, plan: BackupPlan): ImportReport {
+        var inserted = 0
+        var updated = 0
+        var variants = 0
+        var historyRows = 0
+
+        // Снимок существующих товаров — один на весь импорт: новые записи плана не должны влиять
+        // на сопоставление последующих, иначе два товара одной ссылки вели бы себя по-разному.
+        val existingByUrl = productDao.getAllProducts()
+            .associateBy { BackupMerge.canonicalUrl(it.url) }
+
+        plan.items.filter { it.action != BackupItemAction.SKIP }.forEach { item ->
+            val row = backup.products.first { BackupMerge.canonicalUrl(it.url) == item.url }
+            val existing = existingByUrl[item.url]
+            val productId = if (existing == null) {
+                inserted++
+                productDao.insertProduct(row.toEntity(id = 0))
+            } else {
+                updated++
+                productDao.updateProduct(row.toEntity(id = existing.id))
+                existing.id
+            }
+
+            variants += restoreVariants(productId, backup.variantsFor(row.url))
+            historyRows += restoreHistory(productId, backup.historyFor(row.url))
+        }
+
+        return ImportReport(
+            inserted = inserted,
+            updated = updated,
+            variantsRestored = variants,
+            historyRestored = historyRows,
+            skipped = plan.skipCount,
+        )
+    }
+
+    private suspend fun restoreVariants(productId: Long, rows: List<BackupVariantRow>): Int {
+        if (rows.isEmpty()) return 0
+        val known = productDao.getVariants(productId).associateBy { it.variantKey }
+        rows.forEach { row ->
+            val previous = known[row.variantKey]
+            val entity = ProductVariantEntity(
+                id = previous?.id ?: 0,
+                productId = productId,
+                variantKey = row.variantKey,
+                volume = row.volume,
+                label = row.label,
+                article = row.article,
+                lastPrice = row.lastPrice,
+                oldPrice = row.oldPrice,
+                lastCheckedAt = previous?.lastCheckedAt,
+                isTracked = row.isTracked,
+                lastSeenAt = previous?.lastSeenAt,
+            )
+            // id сохраняем: на него опирается история цен этого объёма.
+            if (previous == null) productDao.insertVariant(entity) else productDao.updateVariant(entity)
+        }
+        return rows.size
+    }
+
+    private suspend fun restoreHistory(productId: Long, rows: List<BackupHistoryRow>): Int {
+        if (rows.isEmpty()) return 0
+        val variants = productDao.getVariants(productId)
+        val variantIds = variants.associate { it.variantKey to it.id }
+        val labels = variants.mapNotNull { entity -> entity.toDomain().let { it.variantKey to it.displayName() } }.toMap()
+        val known = productDao.getHistoryForProductsBlocking(listOf(productId))
+            .map { keyOf(it) }
+            .toSet()
+        val fresh = rows
+            .map { row ->
+                PriceHistoryEntryEntity(
+                    productId = productId,
+                    variantId = variantIds[row.variantKey],
+                    // Подпись объёма нужна списку и графику; если вариант в копии не нашёлся,
+                    // строка остаётся без подписи — это честно, а не выдуманное «100 мл».
+                    volumeLabel = labels[row.variantKey],
+                    price = row.price,
+                    checkedAt = row.checkedAt,
+                )
+            }
+            .filter { keyOf(it) !in known }
+        if (fresh.isNotEmpty()) productDao.insertHistoryEntries(fresh)
+        return fresh.size
+    }
+
+    /** Чем опознаётся строка истории: товар + объём + цена + момент. Id в копии нет. */
+    private fun keyOf(entry: PriceHistoryEntryEntity): Triple<Long, Double, Long> =
+        Triple(entry.productId, entry.price, entry.checkedAt)
+
+    /** Итог импорта — его показываем человеку: «что именно изменилось в базе» без цифр не проверить. */
+    data class ImportReport(
+        val inserted: Int,
+        val updated: Int,
+        val variantsRestored: Int,
+        val historyRestored: Int,
+        val skipped: Int,
+    ) {
+        val isNothingToDo: Boolean get() = inserted == 0 && updated == 0 && historyRestored == 0
     }
 
     companion object {

@@ -9,6 +9,7 @@ import androidx.navigation.navArgument
 import com.example.otsled.ui.AppViewModelFactory
 import com.example.otsled.ui.challenge.BrowserCheckScreen
 import com.example.otsled.ui.products.AddProductScreen
+import com.example.otsled.ui.products.EditProductScreen
 import com.example.otsled.ui.products.ProductDetailScreen
 import com.example.otsled.ui.products.ProductListScreen
 import com.example.otsled.ui.settings.SettingsScreen
@@ -58,6 +59,18 @@ fun OtsledNavGraph(
                 onClosed = {
                     navController.popBackStack(Routes.PRODUCT_LIST, inclusive = false)
                 },
+                onEdit = { navController.navigate(Routes.editProduct(productId)) },
+            )
+        }
+        composable(
+            route = Routes.EDIT_PRODUCT,
+            arguments = listOf(navArgument("productId") { type = NavType.LongType }),
+        ) { backStackEntry ->
+            val productId = backStackEntry.arguments?.getLong("productId") ?: return@composable
+            EditProductScreen(
+                viewModelFactory = viewModelFactory,
+                productId = productId,
+                onBack = { navController.popBackStack() },
             )
         }
         composable(Routes.SETTINGS) {

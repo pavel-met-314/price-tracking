@@ -1,11 +1,18 @@
 package com.example.otsled.ui.settings
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.otsled.data.settings.SettingsRepository
 import com.example.otsled.data.update.AppUpdateFeed
+import com.example.otsled.domain.Backup
+import com.example.otsled.domain.BackupDecodeResult
+import com.example.otsled.domain.BackupFailure
+import com.example.otsled.domain.BackupFormat
+import com.example.otsled.domain.BackupPlan
 import com.example.otsled.data.update.UpdateChecker
 import com.example.otsled.di.AppContainer
+import com.example.otsled.R
 import com.example.otsled.domain.model.PriceCheckLog
 import com.example.otsled.service.PriceCheckForegroundService
 import com.example.otsled.util.ApkInstaller
@@ -16,7 +23,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Этап ручной проверки обновления: UI показывает одну кнопку, которая означает всё остальное. */
 enum class UpdateStage {
@@ -169,7 +178,181 @@ class SettingsViewModel(
         container.parseSessionStore.clear()
     }
 
+    // ---------- порог уведомлений и тихие часы ----------
+
+    val minNotifyPercent = settingsRepository.minNotifyChangePercent
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), settingsRepository.getMinNotifyChangePercent())
+
+    val quietHoursEnabled = settingsRepository.quietHoursEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), settingsRepository.isQuietHoursEnabled())
+
+    val quietWindow = settingsRepository.quietWindow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), settingsRepository.getQuietStartMinute() to settingsRepository.getQuietEndMinute())
+
+    fun setMinNotifyPercent(percent: Int) {
+        settingsRepository.setMinNotifyChangePercent(percent)
+    }
+
+    fun setQuietHoursEnabled(enabled: Boolean) {
+        settingsRepository.setQuietHoursEnabled(enabled)
+    }
+
+    fun setQuietWindow(startMinute: Int, endMinute: Int) {
+        settingsRepository.setQuietWindow(startMinute, endMinute)
+    }
+
+    // ---------- резервная копия ----------
+
+    private val _backup = MutableStateFlow(BackupUiState())
+    val backup = _backup.asStateFlow()
+
+    /**
+     * Экспорт — один CSV-файл, который человек может унести куда угодно (Drive, письмо, флешка).
+     * Пишем через SAF: приложение не просит доступа ко всему хранилищу и не выбирает путь само.
+     */
+    fun exportTo(uri: Uri?) {
+        if (uri == null) return
+        val context = container.applicationContext
+        _backup.update { it.copy(isBusy = true, message = null, pending = null, plan = null) }
+        viewModelScope.launch {
+            val outcome = runCatching {
+                withContext(Dispatchers.IO) {
+                    val (products, variants, history) = container.productRepository.exportSnapshot()
+                    val text = BackupFormat.encode(BackupFormat.build(products, variants, history))
+                    context.contentResolver.openOutputStream(uri)?.use { stream ->
+                        stream.write(text.toByteArray(Charsets.UTF_8))
+                    } ?: error("файл не открывается для записи")
+                    products.size
+                }
+            }
+            _backup.update {
+                outcome.fold(
+                    onSuccess = { count ->
+                        it.copy(
+                            isBusy = false,
+                            message = context.getString(R.string.backup_exported, count),
+                        )
+                    },
+
+                    onFailure = { error ->
+                        it.copy(
+                            isBusy = false,
+                            message = context.getString(R.string.backup_error_write, error.message ?: ""),
+                        )
+                    },
+                )
+            }
+        }
+    }
+
+    /**
+     * Импорт читаем и планируем, но НЕ применяем молча: «в файле 3 новых и 1 совпадёт с
+     * текущими» — то, что человек должен увидеть до того, как база изменится.
+     */
+    fun importFrom(uri: Uri?) {
+        if (uri == null) return
+        _backup.update { it.copy(isBusy = true, message = null, pending = null, plan = null) }
+        viewModelScope.launch {
+            val outcome = runCatching {
+                withContext(Dispatchers.IO) {
+                    val text = container.applicationContext.contentResolver.openInputStream(uri)?.use { stream ->
+                        stream.readBytes().toString(Charsets.UTF_8)
+                    } ?: error("файл не читается")
+                    BackupFormat.decode(text)
+                }
+            }
+            outcome.fold(
+                onSuccess = { decoded ->
+                    if (!decoded.isValid) {
+                        _backup.update {
+                            it.copy(
+                                isBusy = false,
+                                failure = decoded.failure?.name,
+                                message = decoded.details ?: decoded.warnings.firstOrNull(),
+                            )
+                        }
+                        return@launch
+                    }
+                    val backup = decoded.backup!!
+                    val plan = withContext(Dispatchers.IO) { container.productRepository.backupPlan(backup) }
+                    _backup.update {
+                        it.copy(
+                            isBusy = false,
+                            pending = backup,
+                            plan = plan,
+                            failure = null,
+                            message = decoded.warnings.firstOrNull(),
+                        )
+                    }
+                },
+                onFailure = { error ->
+                    _backup.update {
+                        it.copy(
+                            isBusy = false,
+                            message = container.applicationContext.getString(
+                                R.string.backup_error_read,
+                                error.message ?: "",
+                            ),
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    fun applyImport() {
+        val pending = _backup.value.pending ?: return
+        val plan = _backup.value.plan ?: return
+        val context = container.applicationContext
+        _backup.update { it.copy(isBusy = true) }
+        viewModelScope.launch {
+            val outcome = runCatching {
+                withContext(Dispatchers.IO) { container.productRepository.importBackup(pending, plan) }
+            }
+            outcome.fold(
+                onSuccess = { report ->
+                    val text = if (report.isNothingToDo) {
+                        context.getString(R.string.backup_nothing_to_do)
+                    } else {
+                        context.getString(
+                            R.string.backup_imported,
+                            report.inserted,
+                            report.updated,
+                            report.historyRestored,
+                        )
+                    }
+                    _backup.update { it.copy(isBusy = false, pending = null, plan = null, failure = null, message = text) }
+                },
+                onFailure = { error ->
+                    _backup.update {
+                        it.copy(
+                            isBusy = false,
+                            message = context.getString(R.string.backup_error_interrupted, error.message ?: ""),
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    fun cancelImport() {
+        _backup.update { BackupUiState() }
+    }
+
     companion object {
         private const val LOG_DISPLAY_LIMIT = 25
     }
+}
+
+/** Экран показывает либо результат, либо «что будет», если импорт ещё не подтверждён. */
+data class BackupUiState(
+    val isBusy: Boolean = false,
+    /** Файл прочитан и распланирован — ждёт подтверждения. */
+    val pending: Backup? = null,
+    val plan: BackupPlan? = null,
+    val message: String? = null,
+    val failure: String? = null,
+) {
+    val awaitsConfirmation: Boolean get() = pending != null && plan != null
+
 }

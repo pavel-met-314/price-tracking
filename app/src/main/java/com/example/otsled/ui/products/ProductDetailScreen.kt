@@ -34,7 +34,9 @@ import com.example.otsled.R
 import com.example.otsled.domain.model.PriceHistoryEntry
 import com.example.otsled.ui.AppViewModelFactory
 import com.example.otsled.domain.model.ProductStatus
+import com.example.otsled.domain.LayoutChangeDetection
 import com.example.otsled.domain.model.TrackedProduct
+import com.example.otsled.domain.partRes
 import com.example.otsled.domain.model.isPaused
 import com.example.otsled.domain.model.status
 import com.example.otsled.util.DateFormatter
@@ -47,6 +49,7 @@ fun ProductDetailScreen(
     productId: Long,
     onBack: () -> Unit,
     onClosed: () -> Unit,
+    onEdit: () -> Unit,
 ) {
     val viewModel: ProductDetailViewModel = viewModel(
         factory = object : androidx.lifecycle.ViewModelProvider.Factory {
@@ -69,7 +72,7 @@ fun ProductDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(product?.title ?: "...") },
+                title = { Text(product?.displayName ?: "...") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
@@ -135,6 +138,14 @@ fun ProductDetailScreen(
                         onSelectVariant = viewModel::selectVariant,
                         modifier = Modifier.padding(top = 12.dp),
                     )
+                    TextButton(
+                        onClick = onEdit,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 12.dp),
+                    ) {
+                        Text(stringResource(R.string.action_edit))
+                    }
                     Button(
                         onClick = viewModel::checkNow,
                         enabled = !uiState.isChecking,
@@ -270,6 +281,17 @@ private fun StatusNotice(product: TrackedProduct) {
         }
     }
     product.archivedAt?.let { lines += stringResource(R.string.status_archived, DateFormatter.format(it)) }
+    // Подозрение на смену вёрстки — про нас, а не про товар: цены мы получили, но, возможно,
+    // не все. Молчать об этом нельзя: «цена не изменилась» и «мы больше ничего не видим» — разные
+    // новости, и различать их должен человек, а не гадать по пустому графику.
+    if (product.hasLayoutSuspicion) {
+        val parts = LayoutChangeDetection.parseNote(product.layoutNote)
+            .joinToString(", ") { regression -> stringResource(regression.partRes()) }
+        lines += stringResource(R.string.problem_layout_suspicion, parts)
+    }
+    if (!product.titleOverride.isNullOrBlank()) {
+        lines += stringResource(R.string.status_title_override)
+    }
     if (lines.isEmpty()) return
 
     Card(

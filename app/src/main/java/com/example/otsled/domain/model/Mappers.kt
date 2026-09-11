@@ -21,6 +21,9 @@ fun TrackedProductEntity.toDomain(): TrackedProduct = TrackedProduct(
     lastErrorMessage = lastErrorMessage,
     consecutiveFailures = consecutiveFailures,
     archivedAt = archivedAt,
+    titleOverride = titleOverride,
+    layoutNote = lastLayoutNote,
+    fingerprint = lastFingerprint,
 )
 
 fun TrackedProduct.toEntity(): TrackedProductEntity = TrackedProductEntity(
@@ -38,6 +41,9 @@ fun TrackedProduct.toEntity(): TrackedProductEntity = TrackedProductEntity(
     lastErrorMessage = lastErrorMessage,
     consecutiveFailures = consecutiveFailures,
     archivedAt = archivedAt,
+    titleOverride = titleOverride,
+    lastLayoutNote = layoutNote,
+    lastFingerprint = fingerprint,
 )
 
 fun ProductVariantEntity.toDomain(): ProductVariant = ProductVariant(
@@ -121,4 +127,23 @@ fun PriceCheckLog.toEntity(): PriceCheckLogEntity = PriceCheckLogEntity(
     message = message,
     variantsCount = variantsCount,
     createdAt = createdAt,
+)
+
+/**
+ * Строка резервной копии -> запись базы. Цену и отметки сохраняем как есть: копия нужна в том
+ * числе ради истории, которую самим не восстановить.
+ */
+fun com.example.otsled.domain.BackupProductRow.toEntity(id: Long): TrackedProductEntity = TrackedProductEntity(
+    id = id,
+    url = url,
+    title = title,
+    targetPrice = targetPrice,
+    lastPrice = lastPrice,
+    lastCheckedAt = lastCheckedAt,
+    isActive = isActive,
+    notifyOnAnyChange = notifyOnAnyChange,
+    notifyOnTargetReached = notifyOnTargetReached,
+    lastSuccessAt = lastSuccessAt,
+    archivedAt = archivedAt,
+    titleOverride = titleOverride,
 )

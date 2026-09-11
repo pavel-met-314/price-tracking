@@ -12,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -23,14 +24,22 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.otsled.R
@@ -127,6 +136,8 @@ fun SettingsScreen(
                 )
             }
 
+            NotificationPolicyCard(viewModel)
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 Text(
                     text = stringResource(R.string.notifications_permission),
@@ -184,6 +195,244 @@ fun SettingsScreen(
             ) {
                 Text(stringResource(R.string.reset_parse_session))
             }
+
+            BackupCard(viewModel)
+        }
+    }
+}
+
+/**
+ * Порог «сообщать об изменении цены» и тихие часы. Оба правила глушат звук, но не запись:
+ * история цен пишется всегда — иначе настройка «не мешать» превращается в «потерять данные».
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NotificationPolicyCard(viewModel: SettingsViewModel) {
+    val percent by viewModel.minNotifyPercent.collectAsStateWithLifecycle()
+    val quietEnabled by viewModel.quietHoursEnabled.collectAsStateWithLifecycle()
+    val quietWindow by viewModel.quietWindow.collectAsStateWithLifecycle()
+    var picking by remember { mutableStateOf<String?>(null) }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 16.dp),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(stringResource(R.string.notify_card_title), style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = stringResource(R.string.notify_card_desc),
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+
+            Text(
+                text = stringResource(R.string.notify_threshold_label),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                SettingsRepository.NOTIFY_PERCENT_OPTIONS.forEach { option ->
+                    FilterChip(
+                        selected = percent == option,
+                        onClick = { viewModel.setMinNotifyPercent(option) },
+                        label = {
+                            Text(
+                                if (option == 0) {
+                                    stringResource(R.string.notify_percent_any)
+                                } else {
+                                    stringResource(R.string.notify_percent_value, option)
+                                },
+                            )
+                        },
+                    )
+                }
+            }
+            Text(
+                text = stringResource(R.string.notify_threshold_desc),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.quiet_hours_title), style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        text = stringResource(R.string.quiet_hours_desc),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+                Switch(checked = quietEnabled, onCheckedChange = viewModel::setQuietHoursEnabled)
+            }
+
+            if (quietEnabled) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedButton(onClick = { picking = "start" }) {
+                        Text("${stringResource(R.string.quiet_hours_start)} ${formatMinute(quietWindow.first)}")
+                    }
+                    OutlinedButton(onClick = { picking = "end" }) {
+                        Text("${stringResource(R.string.quiet_hours_end)} ${formatMinute(quietWindow.second)}")
+                    }
+                }
+                if (quietWindow.first == quietWindow.second) {
+                    Text(
+                        text = stringResource(R.string.quiet_hours_same_warning),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+            }
+        }
+    }
+
+    if (picking != null) {
+        val isStart = picking == "start"
+        val initial = if (isStart) quietWindow.first else quietWindow.second
+        val state = rememberTimePickerState(
+            initialHour = initial / 60,
+            initialMinute = initial % 60,
+            is24Hour = true,
+        )
+        AlertDialog(
+            onDismissRequest = { picking = null },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val minutes = state.hour * 60 + state.minute
+                        if (isStart) {
+                            viewModel.setQuietWindow(minutes, quietWindow.second)
+                        } else {
+                            viewModel.setQuietWindow(quietWindow.first, minutes)
+                        }
+                        picking = null
+                    },
+                ) {
+                    Text(stringResource(R.string.edit_save))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { picking = null }) {
+                    Text(stringResource(R.string.backup_cancel))
+                }
+            },
+            text = { TimePicker(state = state) },
+        )
+    }
+}
+
+/** 24-часовой формат без `java.time` (minSdk 24) и без зависимости от локали устройства. */
+private fun formatMinute(minutesOfDay: Int): String =
+    "%02d:%02d".format(minutesOfDay / 60 % 24, minutesOfDay % 60)
+
+/**
+ * Экспорт и импорт копии. Импорт намеренно двухшаговый: файл может быть вчерашним, и молча
+ * перезаписать настройку уведомлений человека — не то, за чем он открывает «Загрузить из файла».
+ */
+@Composable
+private fun BackupCard(viewModel: SettingsViewModel) {
+    val state by viewModel.backup.collectAsStateWithLifecycle()
+
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/comma-separated-values")) { uri ->
+        viewModel.exportTo(uri)
+    }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        viewModel.importFrom(uri)
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 24.dp),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(stringResource(R.string.backup_card_title), style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = stringResource(R.string.backup_card_desc),
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
+                    onClick = { exportLauncher.launch("otsled-backup-${System.currentTimeMillis()}.csv") },
+                    enabled = !state.isBusy,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(stringResource(R.string.backup_export))
+                }
+                OutlinedButton(
+                    onClick = { importLauncher.launch(arrayOf("text/*", "text/csv", "text/comma-separated-values", "*/*")) },
+                    enabled = !state.isBusy,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(stringResource(R.string.backup_import))
+                }
+            }
+
+            state.plan?.let { plan ->
+                Text(
+                    text = stringResource(R.string.backup_plan, plan.insertCount, plan.updateCount),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                    Button(onClick = { viewModel.applyImport() }, enabled = !state.isBusy) {
+                        Text(stringResource(R.string.backup_apply))
+                    }
+                    OutlinedButton(onClick = { viewModel.cancelImport() }) {
+                        Text(stringResource(R.string.backup_cancel))
+                    }
+                }
+            }
+
+            state.failure?.let { failure ->
+                Text(
+                    text = stringResource(
+                        when (failure) {
+                            "VERSION_TOO_NEW" -> R.string.backup_failed_version
+                            "NO_PRODUCTS" -> R.string.backup_failed_no_products
+                            "EMPTY" -> R.string.backup_failed_empty
+                            else -> R.string.backup_failed_not_a_backup
+                        },
+                        state.message.orEmpty(),
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+
+            state.message?.let { message ->
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
         }
     }
 }
@@ -210,16 +459,23 @@ private fun CheckLogRow(entry: PriceCheckLog) {
                 },
                 style = MaterialTheme.typography.labelMedium,
             )
+            // Подозрение на смену вёрстки — не ошибка проверки (цены мы получили), но выделять
+            // его обязаны: «всё хорошо» здесь было бы неправдой.
+            val layoutNote = entry.kind == PriceCheckLog.KIND_LAYOUT
             Text(
-                text = if (failed) {
-                    stringResource(R.string.check_log_error, entry.kind, entry.message.orEmpty())
-                } else {
+                text = when {
+                    layoutNote -> entry.message.orEmpty()
+                    failed -> stringResource(R.string.check_log_error, entry.kind, entry.message.orEmpty())
                     // Сообщение есть не у каждой проверки: у поиска оно и есть весь результат.
-                    entry.message?.takeIf { it.isNotBlank() }
+                    else -> entry.message?.takeIf { it.isNotBlank() }
                         ?: stringResource(R.string.check_log_ok, entry.variantsCount)
                 },
                 style = MaterialTheme.typography.bodySmall,
-                color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                color = if (failed || layoutNote) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
             )
         }
     }

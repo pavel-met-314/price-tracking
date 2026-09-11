@@ -6,6 +6,7 @@ import com.example.otsled.data.parser.ParseResult
 import com.example.otsled.data.parser.PricePageLoader
 import com.example.otsled.data.parser.ParsedProductVariant
 import com.example.otsled.data.parser.ProductUrlNormalizer
+import com.example.otsled.domain.ProductEditing
 import com.example.otsled.data.site.SiteSearchHit
 import com.example.otsled.data.site.SiteSearchResult
 import com.example.otsled.data.site.SiteSearchTracking
@@ -269,9 +270,9 @@ class AddProductViewModel(
                 }
             }
 
-            val targetPrice = state.targetPrice.trim()
-                .replace(',', '.')
-                .toDoubleOrNull()
+            // Тот же разбор, что и на экране правки: «1 200» и «1200,50 ₽» — валидные записи,
+            // а toDoubleOrNull() молча их терял, и цель не ставилась.
+            val targetPrice = ProductEditing.parseTarget(state.targetPrice)
 
             val now = System.currentTimeMillis()
             // minOf на пустом списке бросает NoSuchElementException — вариант «страница есть,

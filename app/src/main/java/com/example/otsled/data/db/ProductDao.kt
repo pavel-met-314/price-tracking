@@ -142,4 +142,62 @@ interface ProductDao {
 
     @Query("DELETE FROM price_check_log WHERE productId = :productId")
     suspend fun deleteLogForProduct(productId: Long)
+
+    /**
+     * Ручная правка товара. Что сбрасывать при смене ссылки решает domain (ProductEditing), здесь
+     * просто пишем то, что ему сказали: цену передают null, когда страница стала другой.
+     */
+    @Query(
+        """
+        UPDATE products
+        SET url = :url,
+            titleOverride = :titleOverride,
+            targetPrice = :targetPrice,
+            notifyOnAnyChange = :notifyAnyChange,
+            notifyOnTargetReached = :notifyTargetReached,
+            lastPrice = :lastPrice,
+            lastFingerprint = NULL,
+            lastLayoutNote = '',
+            lastErrorCode = '',
+            lastErrorMessage = NULL,
+            consecutiveFailures = 0
+        WHERE id = :id
+        """,
+    )
+    suspend fun updateEditableFields(
+        id: Long,
+        url: String,
+        titleOverride: String?,
+        targetPrice: Double?,
+        notifyAnyChange: Boolean,
+        notifyTargetReached: Boolean,
+        lastPrice: Double?,
+    )
+
+    /** Отпечаток разметки и заметка о том, что в ней перестало находиться (см. domain/LayoutFingerprint). */
+    @Query("UPDATE products SET lastFingerprint = :fingerprint, lastLayoutNote = :note WHERE id = :id")
+    suspend fun setLayoutInfo(id: Long, fingerprint: String?, note: String)
+
+    @Query("DELETE FROM product_variants WHERE productId = :productId")
+    suspend fun deleteVariantsForProduct(productId: Long)
+
+    @Query("DELETE FROM price_history WHERE productId = :productId")
+    suspend fun deleteHistoryForProduct(productId: Long)
+
+    // Синхронные запросы — для виджета и экспорта: они вызываются с фонового потока, где вешать
+    // корутины не на что (AppWidgetProvider живёт миллисекунды).
+    @Query("SELECT * FROM products WHERE isActive = 1 AND archivedAt IS NULL ORDER BY id DESC")
+    fun getActiveProductsBlocking(): List<TrackedProductEntity>
+
+    @Query("SELECT * FROM price_history WHERE productId IN (:ids)")
+    fun getHistoryForProductsBlocking(ids: List<Long>): List<PriceHistoryEntryEntity>
+
+    @Query("SELECT * FROM product_variants")
+    fun getAllVariantsBlocking(): List<ProductVariantEntity>
+
+    @Query("SELECT * FROM price_history")
+    fun getAllHistoryBlocking(): List<PriceHistoryEntryEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertHistoryEntries(entries: List<PriceHistoryEntryEntity>)
 }

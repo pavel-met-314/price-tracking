@@ -11,6 +11,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.example.otsled.OtsledApplication
 import com.example.otsled.data.settings.SettingsRepository
+import com.example.otsled.ui.widget.DroppedPriceWidget
 import java.util.concurrent.TimeUnit
 
 class PriceCheckWorker(
@@ -24,8 +25,16 @@ class PriceCheckWorker(
         // о повторе принимается по итогу прогона: ретраим, только если не удалось ничего.
         return runCatching { container.priceCheckUseCase.checkAllActiveProducts() }
             .fold(
-                onSuccess = { outcome -> if (outcome.shouldRetry) Result.retry() else Result.success() },
-                onFailure = { Result.retry() },
+                onSuccess = { outcome ->
+                    // Виджет сам на базу не подписан: обновляем его руками после каждого цикла,
+                    // иначе на домашнем экране неделями висели бы вчерашние цены.
+                    DroppedPriceWidget.pushUpdate(applicationContext)
+                    if (outcome.shouldRetry) Result.retry() else Result.success()
+                },
+                onFailure = {
+                    DroppedPriceWidget.pushUpdate(applicationContext)
+                    Result.retry()
+                },
             )
     }
 

@@ -16,10 +16,24 @@ data class TrackedProduct(
     val consecutiveFailures: Int = 0,
     /** Когда товар убран в архив; null — отслеживается как обычно. */
     val archivedAt: Long? = null,
+    /** Название, вписанное пользователем; пустое — показываем прочитанное со страницы. */
+    val titleOverride: String? = null,
+    /** Что перестало находиться на странице (см. domain/LayoutFingerprint); пустая строка — всё штатно. */
+    val layoutNote: String = "",
+    /** Снимок последней удачной разметки; null — сравнивать ещё не с чем. */
+    val fingerprint: String? = null,
 ) {
+    /** Как товар называть в UI и в уведомлениях: ручное название важнее разбора. */
+    val displayName: String
+        get() = titleOverride?.takeIf { it.isNotBlank() } ?: title
+
     /** Проверка запускалась, но цены получены не были — в списке это надо показать честно. */
     val hasCheckProblem: Boolean
-        get() = consecutiveFailures > 0
+        get() = consecutiveFailures > 0 || hasLayoutSuspicion
+
+    /** Вёрстка поменялась: цены находятся не все. Это наша проблема, но решать её пользователю. */
+    val hasLayoutSuspicion: Boolean
+        get() = layoutNote.isNotBlank()
 
     val isBotBlocked: Boolean
         get() = lastErrorCode == ParseResultKind.BOT_CHALLENGE
@@ -108,5 +122,8 @@ data class PriceCheckLog(
 
         /** Не ошибка парсера, а решение приложения: отслеживание товара поставлено на паузу. */
         const val KIND_PAUSED = "PAUSED"
+
+        /** Цены мы получили, но часть разметки перестала читаться — подозрение на смену вёрстки. */
+        const val KIND_LAYOUT = "LAYOUT"
     }
 }

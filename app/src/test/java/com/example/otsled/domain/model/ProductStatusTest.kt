@@ -21,6 +21,8 @@ class ProductStatusTest {
         lastCheckedAt: Long? = 1L,
         isActive: Boolean = true,
         archivedAt: Long? = null,
+        titleOverride: String? = null,
+        layoutNote: String = "",
     ) = TrackedProduct(
         id = 1,
         url = "https://allureparfum.ru/katalog/x.html",
@@ -33,6 +35,8 @@ class ProductStatusTest {
         lastErrorMessage = if (errorCode.isEmpty()) null else "msg",
         consecutiveFailures = failures,
         archivedAt = archivedAt,
+        titleOverride = titleOverride,
+        layoutNote = layoutNote,
     )
 
     @Test
@@ -104,6 +108,27 @@ class ProductStatusTest {
         assertFalse(archived.isPaused)
         assertTrue(paused.isPaused)
         assertFalse(paused.isArchived)
+    }
+
+    @Test
+    fun manualTitleWinsOverTheParsedOne() {
+        // Название правят затем, чтобы узнавать свой флакон в списке: оно не должно
+        // перезаписаться со страницы при следующей проверке.
+        assertEquals("Анюта", product(titleOverride = "Анюта").displayName)
+        assertEquals("Kirke", product(titleOverride = "   ").displayName)
+        assertEquals("Kirke", product().displayName)
+    }
+
+    @Test
+    fun brokenLayoutIsOurProblemEvenWithoutFailures() {
+        // Цены мы получили, но половину разметки перестали видеть. Сказать в этот момент
+        // «всё хорошо» — значит оставить человека одного с неполными данными.
+        val suspicious = product(layoutNote = "VOLUMES_GONE")
+
+        assertTrue(suspicious.hasLayoutSuspicion)
+        assertTrue(suspicious.hasCheckProblem)
+        assertFalse(product().hasCheckProblem)
+        assertFalse(product().hasLayoutSuspicion)
     }
 
     @Test

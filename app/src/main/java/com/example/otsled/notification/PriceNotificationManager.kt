@@ -16,6 +16,9 @@ class PriceNotificationManager(private val context: Context) {
 
     init {
         createChannel()
+        // Канал заводим сразу: решение о «тихой» доставке принимается ночью, и создавать канал на
+        // лету — значит отдать первое уведомление дефолтной важности системы.
+        createChannel(CHANNEL_ID_SILENT, "Цены (тихие часы)", NotificationManager.IMPORTANCE_LOW)
     }
 
     /**
@@ -23,11 +26,17 @@ class PriceNotificationManager(private val context: Context) {
      * следующее перезаписывает предыдущее: из изменения цен трёх объёмов пользователь увидел
      * бы только последнее.
      */
+    /**
+     * [silent] — «в тихие часы»: сообщение кладётся в канал без звука и без всплывающего окна.
+     * Именно кладётся, а не выбрасывается: проспать падение цены из-за того, что телефон был
+     * на тумбочке, — обиднее, чем молчаливое уведомление в шторке.
+     */
     fun showPriceAlert(
         productId: Long,
         title: String,
         message: String,
         tag: String? = null,
+        silent: Boolean = false,
     ) {
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -40,7 +49,13 @@ class PriceNotificationManager(private val context: Context) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+        val channel = if (silent) {
+            createChannel(CHANNEL_ID_SILENT, "Цены (тихие часы)", NotificationManager.IMPORTANCE_LOW)
+            CHANNEL_ID_SILENT
+        } else {
+            CHANNEL_ID
+        }
+        val notification = NotificationCompat.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(message)
@@ -90,6 +105,9 @@ class PriceNotificationManager(private val context: Context) {
 
     companion object {
         const val CHANNEL_ID = "price_alerts"
+
+        /** Тот же смысл, что и основной канал, но без звука: для тихих часов. */
+        const val CHANNEL_ID_SILENT = "price_alerts_quiet"
         const val CHANNEL_FOREGROUND_ID = "price_check_foreground"
         const val EXTRA_PRODUCT_ID = "product_id"
         const val FOREGROUND_NOTIFICATION_ID = 1001

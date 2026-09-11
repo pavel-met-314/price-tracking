@@ -27,4 +27,9 @@ class AppViewModelFactory(
     fun createProductDetailViewModel(productId: Long): com.example.otsled.ui.products.ProductDetailViewModel {
         return com.example.otsled.ui.products.ProductDetailViewModel(container, productId)
     }
+
+    /** Правка — отдельная ViewModel того же товара: у экрана свои поля и свой результат сохранения. */
+    fun createEditProductViewModel(productId: Long): com.example.otsled.ui.products.EditProductViewModel {
+        return com.example.otsled.ui.products.EditProductViewModel(container, productId)
+    }
 }

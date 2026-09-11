@@ -46,6 +46,7 @@
     <string name="status_not_found">Страница товара не найдена — вероятно, товар снят с продажи</string>
     <string name="status_parse_failed">Страница открывается, но цены не находятся — похоже, магазин поменял вёрстку</string>
     <string name="status_access_failed">Сайт не отдаёт страницу (сеть или проверка браузера) — это не про товар</string>
+    <string name="status_title_override">Название задано вручную — проверки его не меняют</string>
     <string name="status_stale_price">Цена показана последняя известная — на странице её сейчас нет</string>
     <string name="status_paused">Проверки на паузе</string>
     <string name="status_paused_auto">Проверки приостановлены приложением: страница не найдена %1$d раз подряд</string>
@@ -137,4 +138,83 @@
     <string name="browser_check_done">Готово, вернуться</string>
     <string name="browser_check_waiting_page">Читаем страницу…</string>
     <string name="browser_check_reset">Сбросить состояние проверки</string>
+    <!-- Правка товара -->
+    <string name="edit_product_title">Правка товара</string>
+    <string name="edit_title_label">Название в приложении</string>
+    <string name="edit_title_hint">Пусто — как на сайте. Меняется только подпись: цены ищутся по ссылке.</string>
+    <string name="edit_url_hint">Можно вставить адрес с параметрами — лишнее отсекается, страница та же.</string>
+    <string name="edit_target_label">Целевая цена, ₽</string>
+    <string name="edit_checking">Проверяю…</string>
+    <string name="edit_notify_any">Сообщать об изменении цены</string>
+    <string name="edit_notify_target">Сообщать о достижении цели</string>
+    <string name="edit_save">Сохранить</string>
+    <string name="edit_save_and_check">Сохранить и проверить</string>
+    <string name="edit_page_changed_warning">Ссылка ведёт на другую страницу: цена и история этого товара обнулятся, отслеживание начнётся заново. Ссылку можно поправить и без последствий, если страница та же.</string>
+    <string name="edit_error_url_empty">Вставьте ссылку на страницу товара</string>
+    <string name="edit_error_url_site">Нужна ссылка на товар в allureparfum.ru</string>
+    <string name="edit_error_target">Цель должна быть больше нуля</string>
+    <string name="action_edit">Изменить товар</string>
+    <string name="edit_saved">Товар обновлён</string>
+    <string name="edit_check_ok">Проверка прошла, цен найдено: %1$d</string>
+    <string name="edit_check_failed">Проверка не прошла: %1$s</string>
+    <string name="edit_reset_warning">Цены и история будут обнулены</string>
+
+    <!-- Порог уведомлений и тихие часы -->
+    <string name="notify_card_title">Уведомления</string>
+    <string name="notify_card_desc">Сколько должно измениться, чтобы телефон пикнул, и что делать ночью.</string>
+    <string name="notify_threshold_label">Порог изменения</string>
+    <string name="notify_percent_any">о любом</string>
+    <string name="notify_percent_value">%1$d %%</string>
+    <string name="notify_threshold_desc">История цены пишется при любом изменении — порог глушит только уведомление.</string>
+    <string name="quiet_hours_title">Тихие часы</string>
+    <string name="quiet_hours_desc">Ночью уведомление приходит без звука и без всплывающего окна — оно ждёт в шторке, и ни одна новость не теряется.</string>
+    <string name="quiet_hours_start">Начало</string>
+    <string name="quiet_hours_end">Конец</string>
+    <string name="quiet_hours_same_warning">Начало и конец совпали: окно выключено</string>
+
+    <!-- Резервная копия -->
+    <string name="backup_card_title">Резервная копия</string>
+    <string name="backup_card_desc">Один CSV-файл со всеми товарами, ценами и историей. Открывается в таблице; чужой файл можно поправить руками и загрузить обратно.</string>
+    <string name="backup_export">Сохранить в файл</string>
+    <string name="backup_import">Загрузить из файла</string>
+    <string name="backup_exported">Копия сохранена: %1$d товаров</string>
+    <string name="backup_imported">Добавлено %1$d, обновлено %2$d, строк истории: %3$d</string>
+    <string name="backup_nothing_to_do">В файле нет ничего нового — база не изменилась</string>
+    <string name="backup_warnings">Замечания: %1$s</string>
+    <string name="backup_failed_not_a_backup">Это не копия Otsled</string>
+    <string name="backup_failed_empty">Файл пуст</string>
+    <string name="backup_failed_version">Файл новее приложения (%1$s)</string>
+    <string name="backup_failed_no_products">В копии нет ни одного товара</string>
+    <string name="backup_plan">В файле: %1$d новых, %2$d совпадёт с текущими</string>
+    <string name="backup_apply">Применить импорт</string>
+    <string name="backup_cancel">Отменить</string>
+    <string name="backup_error_write">не получилось записать файл: %1$s</string>
+    <string name="backup_error_read">файл не читается: %1$s</string>
+    <string name="backup_error_interrupted">импорт прерван: %1$s</string>
+    <string name="backup_error_unopenable">файл не открывается для чтения</string>
+    <string name="backup_failed_names">Это не копия Otsled: %1$s</string>
+
+    <!-- Ручной прогон «обновить всё» -->
+    <string name="check_all">Обновить всё</string>
+    <string name="check_all_running">Проверка: %1$d из %2$d</string>
+    <string name="check_all_deferred">Не успели %1$d — их догонит плановая проверка</string>
+
+    <!-- Виджет -->
+    <string name="widget_label">Что подешевело</string>
+    <string name="widget_title">Что подешевело</string>
+    <string name="widget_empty">Пока нечего показывать: цены ещё не падали</string>
+    <string name="widget_row_delta">%1$s · %2$s</string>
+    <string name="widget_more">и ещё %1$d</string>
+
+    <!-- Смена вёрстки -->
+    <string name="layout_part_volumes">объёмы</string>
+    <string name="layout_part_old_price">зачёркнутая цена</string>
+    <string name="layout_part_articles">артикулы</string>
+    <string name="layout_part_title">название товара</string>
+    <string name="layout_note_volumes">перестали находиться объёмы (было %1$d, стало %2$d)</string>
+    <string name="layout_note_old_prices">перестала находиться зачёркнутая цена (было %1$d, стало %2$d)</string>
+    <string name="layout_note_articles">перестали находиться артикулы (было %1$d, стало %2$d)</string>
+    <string name="layout_note_title">перестало находиться название товара</string>
+    <string name="problem_layout_suspicion">Похоже, магазин поменял вёрстку: %1$s — цены могли найтись не все</string>
+
 </resources>

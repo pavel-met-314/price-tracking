@@ -47,6 +47,20 @@
             android:name=".service.PriceCheckForegroundService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- Виджет «что подешевело». exported=false: система доставляет APPWIDGET_UPDATE сама,
+             а открывать получателя всему устройству незачем. -->
+        <receiver
+            android:name=".ui.widget.DroppedPriceWidget"
+            android:exported="false"
+            android:label="@string/widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/dropped_widget_info" />
+        </receiver>
     </application>
 
 </manifest>

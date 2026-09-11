@@ -120,7 +120,9 @@ object ProductListOrdering {
 
     /** Название сравниваем без регистра; если его нет — ссылкой, чтобы товар не уезжал в конец. */
     private fun ProductListRow.sortableName(): String =
-        product.title.ifBlank { product.url }.trim().lowercase()
+        // По тому имени, которое человек видит в списке: отсортировать «по названию» и показать
+        // не его — обещание, которое не выполняется.
+        product.displayName.ifBlank { product.url }.trim().lowercase()
 
     /**
      * Сравнение значений, которых может не быть. Отсутствие цены — не «минус бесконечность»,

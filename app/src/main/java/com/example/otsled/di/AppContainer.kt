@@ -83,6 +83,7 @@ class AppContainer(context: Context) {
             productRepository = productRepository,
             pricePageLoader = pricePageLoader,
             notificationManager = notificationManager,
+            alertPolicy = { settingsRepository.alertPolicy() },
         )
     }
 }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -22,6 +23,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -31,13 +33,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.otsled.R
+import com.example.otsled.domain.LayoutChangeDetection
+import com.example.otsled.domain.ManualCheckState
 import com.example.otsled.domain.VariantPriceChange
+import com.example.otsled.domain.partRes
+import com.example.otsled.service.PriceCheckForegroundService
 import com.example.otsled.domain.model.ProductStatus
 import com.example.otsled.domain.model.TrackedProduct
 import com.example.otsled.domain.model.isPaused
@@ -87,6 +94,16 @@ fun ProductListScreen(
                     }
                 },
                 actions = {
+                    // Ручной прогон всего списка: кнопка активна, пока ничего не идёт, — иначе
+                    // десяток нажатий превратился бы в десяток волн запросов к сайту.
+                    val context = LocalContext.current
+                    val progress by ManualCheckState.progress.collectAsStateWithLifecycle()
+                    IconButton(
+                        onClick = { PriceCheckForegroundService.checkOnce(context) },
+                        enabled = progress == null,
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.check_all))
+                    }
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings))
                     }
@@ -121,6 +138,32 @@ fun ProductListScreen(
                     selectedIndex = filterOptions.indexOfFirst { it.first == state.filter },
                     onSelect = { index -> viewModel.onFilterSelected(filterOptions[index].first) },
                 )
+            }
+
+            val manualProgress by ManualCheckState.progress.collectAsStateWithLifecycle()
+            manualProgress?.let { progress ->
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = stringResource(R.string.check_all_running, progress.done, progress.total),
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                        LinearProgressIndicator(
+                            progress = { progress.fraction },
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 12.dp),
+                        )
+                    }
+                    if (!progress.everythingChecked) {
+                        Text(
+                            text = stringResource(R.string.check_all_deferred, progress.deferred),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
+                }
             }
 
             when {
@@ -310,7 +353,7 @@ private fun ProductCard(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = product.title.ifBlank { product.url },
+                text = product.displayName.ifBlank { product.url },
                 style = MaterialTheme.typography.titleMedium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -330,6 +373,18 @@ private fun ProductCard(
                     text = stringResource(R.string.price_change_mark, row.changes.priceMarkText()),
                     style = MaterialTheme.typography.labelSmall,
                     color = priceTrendColor(row.changes.first().delta),
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            if (product.hasLayoutSuspicion) {
+                Text(
+                    text = stringResource(
+                        R.string.problem_layout_suspicion,
+                        LayoutChangeDetection.parseNote(product.layoutNote)
+                            .joinToString(", ") { regression -> stringResource(regression.partRes()) },
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
