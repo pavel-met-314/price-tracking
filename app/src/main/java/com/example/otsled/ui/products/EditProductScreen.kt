@@ -52,7 +52,17 @@ fun EditProductScreen(
     productId: Long,
     onBack: () -> Unit,
 ) {
-    val viewModel: EditProductViewModel = viewModel(factory = viewModelFactory, key = "edit-$productId")
+    // Обычная фабрика этот ViewModel создать не умеет: ему нужен productId. Именно из-за
+    // такой проводки экран падал в пустоту при открытии — обёртка ниже обязана быть, а не «на
+    // всякий случай».
+    val viewModel: EditProductViewModel = viewModel(
+        factory = object : androidx.lifecycle.ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                return viewModelFactory.createEditProductViewModel(productId) as T
+            }
+        },
+    )
     val product by viewModel.product.collectAsStateWithLifecycle()
     val initial by viewModel.initialDraft.collectAsStateWithLifecycle()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
