@@ -31,7 +31,7 @@ class ProductRepository(
 
     fun observeProductIds(): Flow<List<Long>> = productDao.observeProductIds()
 
-    /** История сразу по всем товарам — для мини-графиков в списке. */
+    /** История сразу по всем товарам — чтобы список считал пометку об изменении цены одним запросом. */
     fun observeHistoryForProducts(ids: List<Long>): Flow<List<PriceHistoryEntry>> =
         productDao.observeHistoryForProducts(ids).map { list -> list.map { it.toDomain() } }
 

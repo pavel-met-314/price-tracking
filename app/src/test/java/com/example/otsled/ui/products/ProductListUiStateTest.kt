@@ -1,6 +1,5 @@
 package com.example.otsled.ui.products
 
-import com.example.otsled.domain.PricePoint
 import com.example.otsled.domain.model.TrackedProduct
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -22,7 +21,6 @@ class ProductListUiStateTest {
             lastPrice = 100.0,
             lastCheckedAt = 1_000L + id,
         ),
-        points = listOf(PricePoint(checkedAt = 1_000L, price = 100.0), PricePoint(checkedAt = 2_000L, price = 90.0)),
     )
 
     @Test

@@ -46,14 +46,29 @@ class ProductDetailViewModel(
 
     private val history = repository.observeHistory(productId)
 
-    /** null — обзор по всем объёмам («цена от»), иначе конкретный вариант. */
-    private val selectedVariantId = MutableStateFlow<Long?>(null)
-    val selectedVariant = selectedVariantId.asStateFlow()
+    /** Что выбрал пользователь; null — «дай самый дешёвый отслеживаемый», см. [selectedVariant]. */
+    private val requestedVariantId = MutableStateFlow<Long?>(null)
 
-    val overview = combine(history, selectedVariantId) { entries, variantId ->
-        val filtered = if (variantId == null) entries else entries.filter { it.variantId == variantId }
+    /**
+     * Объём, который сейчас показан. График всегда про один объём: «все объёмы вместе» — это
+     * сравнение 2 мл с 100 мл, и линия на таком ряду врёт. Пока пользователь ничего не выбирал,
+     * показываем самый дешёвый отслеживаемый — его же магазин выставляет в цене «от».
+     */
+    val selectedVariant = combine(requestedVariantId, variants, history) { requested, all, entries ->
+        val tracked = all.filter { it.isTracked }
+        tracked.firstOrNull { it.id == requested }?.id
+            ?: tracked.minByOrNull { it.lastPrice }?.id
+            ?: entries.mapNotNull { it.variantId }.firstOrNull()
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = null,
+    )
+
+    val overview = combine(history, selectedVariant) { entries, variantId ->
+        val filtered = if (variantId == null) emptyList() else entries.filter { it.variantId == variantId }
         PriceOverview(
-            series = buildPriceSeriesFromHistory(filtered),
+            series = if (variantId == null) PriceSeries.EMPTY else buildPriceSeriesFromHistory(filtered, variantId),
             history = filtered,
         )
     }.stateIn(
@@ -65,8 +80,8 @@ class ProductDetailViewModel(
     private val _uiState = MutableStateFlow(ProductDetailUiState())
     val uiState = _uiState.asStateFlow()
 
-    fun selectVariant(variantId: Long?) {
-        selectedVariantId.value = variantId
+    fun selectVariant(variantId: Long) {
+        requestedVariantId.update { variantId }
     }
 
     fun checkNow() {

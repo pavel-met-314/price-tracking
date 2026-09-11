@@ -99,7 +99,7 @@
     <string name="check_log_error">%1$s: %2$s</string>
     <string name="reset_parse_session">Забыть состояние анти-бота</string>
     <string name="price_chart_title">График цены</string>
-    <string name="price_chart_all_volumes">Все объёмы</string>
+    <string name="price_change_mark">с прошлой проверки: %1$s</string>
     <string name="price_chart_needs_points">Нужно минимум два изменения цены, чтобы построить график. История заполняется по мере фоновых проверок.</string>
     <string name="price_chart_min">Минимум</string>
     <string name="price_chart_max">Максимум</string>

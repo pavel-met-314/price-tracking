@@ -1,6 +1,7 @@
 package com.example.otsled.ui.products
 
-import com.example.otsled.domain.PricePoint
+import com.example.otsled.domain.VariantDrop
+import com.example.otsled.domain.VariantPriceChange
 import com.example.otsled.domain.model.TrackedProduct
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -14,13 +15,23 @@ import org.junit.Test
  */
 class ProductListOrderingTest {
 
+    /** Падение одного объёма с `from` до `to` — так же его считает [com.example.otsled.domain.VariantPriceChanges]. */
+    private fun drop(from: Double, to: Double) = VariantDrop(
+        variantId = 1L,
+        label = "100 мл",
+        percent = (to - from) / from * 100.0,
+        delta = to - from,
+        peakPrice = from,
+    )
+
     private fun row(
         id: Long,
         title: String,
         price: Double? = null,
         target: Double? = null,
         checkedAt: Long? = null,
-        history: List<Double> = emptyList(),
+        changes: List<VariantPriceChange> = emptyList(),
+        drop: VariantDrop? = null,
         failures: Int = 0,
         errorCode: String = "",
         archivedAt: Long? = null,
@@ -38,7 +49,8 @@ class ProductListOrderingTest {
             isActive = isActive,
             archivedAt = archivedAt,
         ),
-        points = history.mapIndexed { index, value -> PricePoint(checkedAt = 1_000L + index, price = value) },
+        changes = changes,
+        drop = drop,
     )
 
     @Test
@@ -73,17 +85,20 @@ class ProductListOrderingTest {
     }
 
     @Test
-    fun dropSortPutsTheBiggestFallFirst() {
+    fun dropSortComparesPercentagesNotRubles() {
         val rows = listOf(
-            row(1, "не менялся", price = 100.0, history = listOf(100.0, 100.0)),
-            row(2, "упал сильно", price = 90.0, history = listOf(190.0, 90.0)),
-            row(3, "упал чуть", price = 180.0, history = listOf(190.0, 180.0)),
+            row(1, "не менялся", price = 100.0),
+            row(2, "упал сильно", price = 90.0, drop = drop(from = 190.0, to = 90.0)),
+            row(3, "упал чуть", price = 180.0, drop = drop(from = 190.0, to = 180.0)),
             row(4, "без истории", price = 10.0),
+            // В рублях это падение самое большое (-100), и старая версия порядка ставила его первой.
+            // На самом деле цена ушла на 1 % — товар дешевел с 10 000, а не со 190.
+            row(5, "упал на 100 из 10 000", price = 9_900.0, drop = drop(from = 10_000.0, to = 9_900.0)),
         )
 
         val sorted = ProductListOrdering.apply(rows, ProductSort.DROP, ProductFilter.ALL)
 
-        assertEquals(listOf(2L, 3L, 1L, 4L), sorted.map { it.product.id })
+        assertEquals(listOf(2L, 3L, 5L, 1L, 4L), sorted.map { it.product.id })
     }
 
     @Test
@@ -114,11 +129,11 @@ class ProductListOrderingTest {
     }
 
     @Test
-    fun droppedFilterIgnoresProductsWithOnePoint() {
+    fun droppedFilterNeedsActualFall() {
         val rows = listOf(
-            row(1, "упал", price = 90.0, history = listOf(100.0, 90.0)),
-            row(2, "вырос", price = 110.0, history = listOf(100.0, 110.0)),
-            row(3, "одна точка", price = 100.0, history = listOf(100.0)),
+            row(1, "упал", price = 90.0, drop = drop(from = 100.0, to = 90.0)),
+            row(2, "вырос", price = 110.0, changes = listOf(VariantPriceChange(variantId = 1L, label = "100 мл", delta = 10.0))),
+            row(3, "цену не наблюдали", price = 100.0),
         )
 
         val kept = ProductListOrdering.apply(rows, ProductSort.ADDED, ProductFilter.DROPPED)
@@ -151,9 +166,9 @@ class ProductListOrderingTest {
     @Test
     fun filterAndSortAreAppliedTogether() {
         val rows = listOf(
-            row(1, "упал и ниже цели", price = 90.0, target = 100.0, history = listOf(120.0, 90.0)),
-            row(2, "вырос", price = 130.0, target = 100.0, history = listOf(120.0, 130.0)),
-            row(3, "упал, цели нет", price = 80.0, history = listOf(120.0, 80.0)),
+            row(1, "упал и ниже цели", price = 90.0, target = 100.0, drop = drop(from = 120.0, to = 90.0)),
+            row(2, "вырос", price = 130.0, target = 100.0),
+            row(3, "упал, цели нет", price = 80.0, drop = drop(from = 120.0, to = 80.0)),
         )
 
         val kept = ProductListOrdering.apply(rows, ProductSort.PRICE_ASC, ProductFilter.BELOW_TARGET)

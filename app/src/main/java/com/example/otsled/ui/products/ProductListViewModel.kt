@@ -3,8 +3,9 @@ package com.example.otsled.ui.products
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.otsled.di.AppContainer
-import com.example.otsled.domain.PricePoint
-import com.example.otsled.domain.buildPriceSeriesFromHistory
+import com.example.otsled.domain.VariantDrop
+import com.example.otsled.domain.VariantPriceChange
+import com.example.otsled.domain.VariantPriceChanges
 import com.example.otsled.domain.model.PriceHistoryEntry
 import com.example.otsled.domain.model.TrackedProduct
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -17,18 +18,17 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 
-/** Товар вместе с рядом точек для мини-графика. */
+/**
+ * Товар и то, что делает его цена. Не «цена товара вообще», а по каждому объёму отдельно:
+ * флакон 100 мл и пробник 2 мл на одной шкале дают рост там, где цена падала.
+ */
 data class ProductListRow(
     val product: TrackedProduct,
-    val points: List<PricePoint>,
-) {
-    /** Изменение цены за последний шаг — по нему карточка краснеет или зеленеет. */
-    val trendDelta: Double?
-        get() {
-            if (points.size < 2) return null
-            return points.last().price - points.first().price
-        }
-}
+    /** Изменения последней проверки — по одному на каждый объём, у которого цена поменялась. */
+    val changes: List<VariantPriceChange> = emptyList(),
+    /** Самое сильное падение среди объёмов за наблюдаемую историю — для порядка «упали сильнее всего». */
+    val drop: VariantDrop? = null,
+)
 
 /**
  * Всё, что нужно экрану: показываемые строки, сколько товаров всего и выбранные порядок с
@@ -65,10 +65,11 @@ class ProductListViewModel(
         combine(repository.observeProducts(), historyFlow) { products, history ->
             val byProduct = history.groupBy { it.productId }
             products.map { product ->
-                val series = buildPriceSeriesFromHistory(byProduct[product.id].orEmpty())
+                val entries = byProduct[product.id].orEmpty()
                 ProductListRow(
                     product = product,
-                    points = series.points.takeLast(SPARKLINE_POINTS),
+                    changes = VariantPriceChanges.atLastCheck(entries, product.lastSuccessAt),
+                    drop = VariantPriceChanges.bestDrop(entries),
                 )
             }
         }
@@ -98,10 +99,5 @@ class ProductListViewModel(
     /** Сброс нужен отдельный: под фильтром список выглядит пустым, и это путает сильнее всего. */
     fun resetFilter() {
         _filter.value = ProductFilter.ALL
-    }
-
-    private companion object {
-        /** Больше точек на карточке списка всё равно не различимы. */
-        const val SPARKLINE_POINTS = 24
     }
 }

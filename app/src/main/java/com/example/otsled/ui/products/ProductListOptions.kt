@@ -21,7 +21,11 @@ enum class ProductFilter {
     ALL,
     /** Цена достигла целевой — кандидат на покупку. */
     BELOW_TARGET,
-    /** Цена упала относительно предыдущей проверки. */
+    /**
+     * Цена ниже зафиксированного максимума хотя бы у одного объёма. За всю наблюдаемую историю, а
+     * не за последнюю проверку: подешевело три дня назад и держится — это всё ещё сделка.
+     * Сравниваются проценты внутри объёма — в рублях пробник 2 мл и флакон 100 мл несопоставимы.
+     */
     DROPPED,
     /** Проверка не проходит: блокировка или серия ошибок парсинга. */
     PROBLEM,
@@ -68,7 +72,7 @@ object ProductListOrdering {
             )
 
             ProductSort.DROP ->
-                kept.sortedWith(Comparator<ProductListRow> { a, b -> compareNullable(a.trendDelta, b.trendDelta, nullsFirst = false) })
+                kept.sortedWith(Comparator<ProductListRow> { a, b -> compareNullable(a.drop?.percent, b.drop?.percent, nullsFirst = false) })
 
             ProductSort.STALE ->
                 kept.sortedWith(Comparator<ProductListRow> { a, b -> compareNullable(a.checkedAt, b.checkedAt, nullsFirst = true) })
@@ -78,7 +82,7 @@ object ProductListOrdering {
     fun matches(row: ProductListRow, filter: ProductFilter): Boolean = when (filter) {
         ProductFilter.ALL -> true
         ProductFilter.BELOW_TARGET -> row.isBelowTarget
-        ProductFilter.DROPPED -> (row.trendDelta ?: 0.0) < 0.0
+        ProductFilter.DROPPED -> row.drop != null
         // «С проблемами» — всё, что требует решения: упорные ошибки, блокировка, пауза и то, что
         // товар реально исчез с сайта. Архив сюда не входит: там проблем нет, там выбор пользователя.
         ProductFilter.PROBLEM -> row.product.hasCheckProblem || row.product.isBotBlocked ||
@@ -105,7 +109,7 @@ object ProductListOrdering {
     /**
      * Убывание цены: отсутствие значения по-прежнему в конце. Отрицать результат
      * compareNullable нельзя — тогда «цены нет» становилось бы «самой большой ценой» и выезжало
-     на начало списка (на этом тест и поймал первую версию метода).
+     * в начало списка (на этом тест и поймал первую версию метода).
      */
     private fun comparePriceDescending(a: Double?, b: Double?): Int = when {
         a == null && b == null -> 0

@@ -123,14 +123,14 @@ class PriceSeriesTest {
     }
 
     @Test
-    fun historyFilteredByVariant() {
+    fun historyIsAlwaysBuiltFromOneVariant() {
         val entries = history(10L to 5000.0, 20L to 4800.0, variantId = 1L) +
             history(10L to 9000.0, 20L to 8500.0, variantId = 2L)
 
-        val both = buildPriceSeriesFromHistory(entries)
-        assertEquals(4800.0, both.min!!.price, 0.0)
-
         val onlyFifty = buildPriceSeriesFromHistory(entries, variantId = 2L)
+        // «Минимум» не должен доставаться из цены другого объёма: рядом лежит запись на 4800,
+        // и именно она попадала в подписи, пока ряд умел строиться по всем объёмам сразу.
+        assertEquals(8500.0, onlyFifty.min!!.price, 0.0)
         assertEquals(2, onlyFifty.points.size)
         assertEquals(8500.0, onlyFifty.current!!.price, 0.0)
         assertEquals(-500.0, onlyFifty.deltaFromPrevious!!, 0.0)

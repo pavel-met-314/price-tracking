@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.otsled.R
+import com.example.otsled.domain.VariantPriceChange
 import com.example.otsled.domain.model.ProductStatus
 import com.example.otsled.domain.model.TrackedProduct
 import com.example.otsled.domain.model.isPaused
@@ -241,7 +242,20 @@ private fun TrackedProduct.statusText(): String? = when (status) {
     }
 }
 
+/**
+ * Компактная строка изменений: самые крупные по модулю, остальные — счётчиком. Стрелка вниз —
+ * подешевело, вверх — подорожало; объём подписан, потому что цена у каждого своя.
+ */
+private fun List<VariantPriceChange>.priceMarkText(): String {
+    val shown = take(MAX_CHANGES_IN_MARK).joinToString(" · ") { change ->
+        val arrow = if (change.isFalling) "↓" else "↑"
+        val label = if (change.label.isBlank()) "" else "${change.label} "
+        "$arrow $label${PriceFormatter.formatSigned(change.delta)} ₽"
+    }
+    return if (size > MAX_CHANGES_IN_MARK) "$shown · ещё ${size - MAX_CHANGES_IN_MARK}" else shown
+}
 
+private const val MAX_CHANGES_IN_MARK = 2
 
 @Composable
 private fun ProductCard(
@@ -269,12 +283,14 @@ private fun ProductCard(
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(top = 8.dp),
             )
-            // Динамика прямо в списке: ради этого не нужно открывать карточку каждого товара.
-            if (row.points.size >= 2) {
-                PriceSparkline(
-                    points = row.points,
-                    modifier = Modifier.padding(top = 8.dp),
-                    color = priceTrendColor(row.trendDelta ?: 0.0),
+            // Пометка «цена менялась» вместо графика: здесь важна сама новость, а линия,
+            // сравнивающая разные объёмы, только вводила в заблуждение. Подробности — в карточке.
+            if (row.changes.isNotEmpty()) {
+                Text(
+                    text = stringResource(R.string.price_change_mark, row.changes.priceMarkText()),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = priceTrendColor(row.changes.first().delta),
+                    modifier = Modifier.padding(top = 4.dp),
                 )
             }
             // Отдельно про проблему: «цена не менялась» и «мы не смогли получить цену» —

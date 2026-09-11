@@ -39,7 +39,10 @@ import com.example.otsled.util.PriceFormatter
 private val FallingColor = Color(0xFF1B8A5A)
 private val RisingColor = Color(0xFFC0392B)
 
-/** Один цвет тренда и для большого графика, и для мини-графика в списке: иначе сигналы расходятся. */
+/**
+ * Один цвет для всех сигналов о цене: и на графике, и в пометке «с прошлой проверки» в списке.
+ * Два места с разным смыслом стрелки — это «зелёный тут значит плохое».
+ */
 @Composable
 fun priceTrendColor(delta: Double): Color = when {
     delta < 0.0 -> FallingColor
@@ -160,56 +163,20 @@ fun PriceChart(
     }
 }
 
-/** Мини-график для списка товаров: без осей и подписей, только направление движения цены. */
-@Composable
-fun PriceSparkline(
-    points: List<PricePoint>,
-    modifier: Modifier = Modifier,
-    color: Color = MaterialTheme.colorScheme.primary,
-) {
-    if (points.size < 2) return
-
-    Canvas(modifier = modifier.fillMaxWidth().height(30.dp)) {
-        val prices = points.map { it.price }
-        val lowest = prices.min()
-        val highest = prices.max()
-        val range = (highest - lowest).takeIf { it > 0.0 } ?: 1.0
-        val firstTime = points.first().checkedAt
-        val timeSpan = (points.last().checkedAt - firstTime).coerceAtLeast(1L).toFloat()
-        val usableHeight = size.height * 0.84f
-
-        val xs = points.map { (it.checkedAt - firstTime).toFloat() / timeSpan * size.width }
-        val ys = points.map { (size.height - 2.dp.toPx()) - ((it.price - lowest) / range * usableHeight).toFloat() }
-
-        val line = Path()
-        xs.forEachIndexed { index, x ->
-            if (index == 0) line.moveTo(x, ys[index]) else line.lineTo(x, ys[index])
-        }
-        val area = Path().apply {
-            addPath(line)
-            lineTo(xs.last(), size.height)
-            lineTo(xs.first(), size.height)
-            close()
-        }
-        drawPath(
-            path = area,
-            brush = Brush.verticalGradient(listOf(color.copy(alpha = 0.22f), Color.Transparent)),
-        )
-        drawPath(path = line, color = color, style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round))
-    }
-}
-
 /**
- * Блок «График цены»: переключатель объёмов, сама линия и три цифры — минимум, максимум и
- * изменение с прошлой проверки. История в БД пишется только на изменение цены, поэтому
- * «последняя проверка» здесь = последняя запись в истории, и дата подписана явно.
+ * Блок «График цены»: линия по одному объёму, подписи минимума и максимума у оси и три цифры —
+ * минимум, максимум и изменение с прошлой проверки. История в БД пишется только на изменение
+ * цены, поэтому «последняя проверка» здесь = последняя запись в истории, и дата подписана явно.
+ *
+ * Режима «все объёмы вместе» нет намеренно: сравнивать 2 мл и 100 мл на одной шкале — значит
+ * рисовать рост цены там, где цена падала.
  */
 @Composable
 fun PriceHistoryCard(
     series: PriceSeries,
     variants: List<ProductVariant>,
     selectedVariantId: Long?,
-    onSelectVariant: (Long?) -> Unit,
+    onSelectVariant: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val trendColor = if (series.hasTrend) {
@@ -221,10 +188,22 @@ fun PriceHistoryCard(
 
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = stringResource(R.string.price_chart_title),
-                style = MaterialTheme.typography.titleMedium,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.price_chart_title),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                // График всегда про один объём — пишем какой, иначе цифры ниже оси невозможно
+                // отнести к конкретной цене на странице.
+                selectableVariants.firstOrNull { it.id == selectedVariantId }?.let { variant ->
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = variant.displayName(),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
 
             if (selectableVariants.size > 1) {
                 Row(
@@ -234,11 +213,6 @@ fun PriceHistoryCard(
                         .padding(top = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    FilterChip(
-                        selected = selectedVariantId == null,
-                        onClick = { onSelectVariant(null) },
-                        label = { Text(stringResource(R.string.price_chart_all_volumes)) },
-                    )
                     selectableVariants.forEach { variant ->
                         FilterChip(
                             selected = selectedVariantId == variant.id,
@@ -265,19 +239,21 @@ fun PriceHistoryCard(
                     .padding(top = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                series.max?.let {
-                    Text(
-                        text = stringResource(R.string.price_chart_max_value, PriceFormatter.formatPrice(it.price)),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = RisingColor,
-                    )
-                }
-                Spacer(modifier = Modifier.weight(1f))
+                // Слева — «от» (минимум, зелёный), справа — «до» (максимум, красный): строка
+                // читается как диапазон цен, и порядок в ней важнее, чем позиция точек на линии.
                 series.min?.let {
                     Text(
                         text = stringResource(R.string.price_chart_min_value, PriceFormatter.formatPrice(it.price)),
                         style = MaterialTheme.typography.labelMedium,
                         color = FallingColor,
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                series.max?.let {
+                    Text(
+                        text = stringResource(R.string.price_chart_max_value, PriceFormatter.formatPrice(it.price)),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = RisingColor,
                     )
                 }
             }

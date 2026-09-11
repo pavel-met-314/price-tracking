@@ -61,9 +61,8 @@ data class PriceSeries(
 }
 
 /**
- * История -> ряд для графика. В истории лежит по записи на каждый *изменившийся* объём, поэтому
- * для обзора «цена от» сначала склеиваем записи одного момента проверки в одну точку (минимум
- * по ней), иначе линия скакала бы между разными объёмами.
+ * Точки -> ряд для графика. Записи одного момента проверки склеиваются в одну точку (берём
+ * минимальную цену), чтобы одна проверка не рисовала два значения подряд.
  */
 fun buildPriceSeries(points: List<PricePoint>): PriceSeries {
     if (points.isEmpty()) return PriceSeries.EMPTY
@@ -96,11 +95,13 @@ fun buildPriceSeries(points: List<PricePoint>): PriceSeries {
     )
 }
 
-/** Тот же расчёт, но из истории БД; [variantId] = null — обзорная «цена от» по всем объёмам. */
-fun buildPriceSeriesFromHistory(
-    history: List<PriceHistoryEntry>,
-    variantId: Long? = null,
-): PriceSeries {
-    val filtered = if (variantId == null) history else history.filter { it.variantId == variantId }
-    return buildPriceSeries(filtered.map { PricePoint(it.checkedAt, it.price) })
-}
+/**
+ * Тот же расчёт, но из истории БД. [variantId] обязателен: график всегда про один объём.
+ * Смешивать объёмы в одном ряду нельзя — история пишется на каждый изменившийся вариант, и линия
+ * начала бы прыгать между 2 мл и 100 мл, выдавая это за рост цены.
+ */
+fun buildPriceSeriesFromHistory(history: List<PriceHistoryEntry>, variantId: Long): PriceSeries =
+    buildPriceSeries(
+        history.filter { it.variantId == variantId }
+            .map { PricePoint(it.checkedAt, it.price) },
+    )
