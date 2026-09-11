@@ -37,13 +37,26 @@ data class ProductListRow(
  */
 data class ProductListUiState(
     val rows: List<ProductListRow> = emptyList(),
+    /** Сколько товаров в текущем режиме — для подписи «показано K из N». */
     val totalCount: Int = 0,
+    /** Сколько товаров в таблице вообще, режим не важен. От него решается, пуст ли экран. */
+    val allCount: Int = 0,
     val sort: ProductSort = ProductSort.ADDED,
     val filter: ProductFilter = ProductFilter.ALL,
 ) {
-    val isEmptyList: Boolean get() = totalCount == 0
+    /**
+     * Товаров нет нигде — единственная ситуация, где уместно «добавьте ссылку». Считать это по
+     * `totalCount` было багом: пустой архив давал `totalCount == 0`, экран объявлял список
+     * пустым и прятал чипы — выбраться из «Архива» было нельзя.
+     */
+    val isEmptyList: Boolean get() = allCount == 0
+
+    /** Товары есть, но в этом режиме их не видно: чипы обязаны остаться на экране. */
     val isFilterEmpty: Boolean get() = !isEmptyList && rows.isEmpty()
     val showsAll: Boolean get() = filter == ProductFilter.ALL
+
+    /** Отдельный режим архива: там пусто по-другому, и кнопка нужна другая — «к списку». */
+    val showsArchive: Boolean get() = filter == ProductFilter.ARCHIVE
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -83,6 +96,7 @@ class ProductListViewModel(
             // «из N» — про текущий режим: с архивом в общем счёте заголовок врал бы, что
             // «показано 3 из 40», хотя сорок товаров пользователь сюда не звал.
             totalCount = ProductListOrdering.countInCurrentView(source, filter),
+            allCount = source.size,
             sort = sort,
             filter = filter,
         )

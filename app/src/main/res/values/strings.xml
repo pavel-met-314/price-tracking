@@ -21,7 +21,7 @@
     <string name="update_failed">Не получилось: %1$s</string>
     <string name="update_store_note">Это сборка из магазина: обновления приходят через него. Проверка оставлена как справка — посмотреть, что нового, можно и здесь.</string>
     <string name="products_list_count">Товаров: %1$d</string>
-    <string name="products_list_count_filtered">Показано %1$d из %2$d</string>
+    <string name="products_list_mode_count">%1$s · %2$d из %3$d</string>
     <string name="products_sort_label">Порядок:</string>
     <string name="products_filter_label">Показывать:</string>
     <string name="products_empty_after_filter">Под выбранный фильтр ничего не попало</string>
@@ -38,6 +38,10 @@
     <string name="filter_problem">С проблемами</string>
     <string name="filter_no_price">Без цены</string>
     <string name="filter_archive">В архив</string>
+    <string name="filter_archive_name">Архив</string>
+    <string name="products_empty_archive">Архив пуст</string>
+    <string name="products_empty_archive_hint">В архиве лежат только те товары, которые вы туда убрали, — отслеживаемые никуда не делись.</string>
+    <string name="products_show_tracked">Показать отслеживаемые</string>
     <string name="status_out_of_stock">На странице нет прайс-предложений — объёмы сняли или всё распродано</string>
     <string name="status_not_found">Страница товара не найдена — вероятно, товар снят с продажи</string>
     <string name="status_parse_failed">Страница открывается, но цены не находятся — похоже, магазин поменял вёрстку</string>

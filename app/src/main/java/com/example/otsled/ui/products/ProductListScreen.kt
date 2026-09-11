@@ -66,12 +66,19 @@ fun ProductListScreen(
                 title = {
                     Column {
                         Text(stringResource(R.string.products_title))
-                        if (state.totalCount > 0) {
+                        if (state.allCount > 0) {
                             Text(
                                 text = if (state.showsAll) {
                                     stringResource(R.string.products_list_count, state.totalCount)
                                 } else {
-                                    stringResource(R.string.products_list_count_filtered, state.rows.size, state.totalCount)
+                                    // Режим назван прямо в заголовке: «Архив · 0 из 1» видно сразу,
+                                    // и это не выглядит как «пропали все товары».
+                                    stringResource(
+                                        R.string.products_list_mode_count,
+                                        stringResource(modeNameRes(state.filter)),
+                                        state.rows.size,
+                                        state.totalCount,
+                                    )
                                 },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -99,7 +106,9 @@ fun ProductListScreen(
         ) {
             // Выбор порядка и фильтра живёт над списком и не уезжает при прокрутке: сменить
             // фильтр, не найдя сначала «куда делись товары», — то, чем список неудобнее всего.
-            if (state.totalCount > 0) {
+            // Условие — по всем товарам, а не по текущему режиму: иначе пустой «Архив» лишал
+            // человека единственной кнопки возврата к списку.
+            if (state.allCount > 0) {
                 ChoiceRow(
                     label = stringResource(R.string.products_sort_label),
                     options = sortOptions.map { option -> stringResource(option.second) },
@@ -115,6 +124,31 @@ fun ProductListScreen(
             }
 
             when {
+                state.isFilterEmpty && state.showsArchive -> Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = stringResource(R.string.products_empty_archive),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            text = stringResource(R.string.products_empty_archive_hint),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                        OutlinedButton(
+                            onClick = { viewModel.onFilterSelected(ProductFilter.ALL) },
+                            modifier = Modifier.padding(top = 12.dp),
+                        ) {
+                            Text(stringResource(R.string.products_show_tracked))
+                        }
+                    }
+                }
+
                 state.isEmptyList -> Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -240,6 +274,12 @@ private fun TrackedProduct.statusText(): String? = when (status) {
     } else {
         stringResource(R.string.status_access_failed)
     }
+}
+
+/** Имя режима для заголовка: чип «В архив» — действие, а в подписи нужно место («Архив»). */
+private fun modeNameRes(filter: ProductFilter): Int = when (filter) {
+    ProductFilter.ARCHIVE -> R.string.filter_archive_name
+    else -> filterOptions().first { it.first == filter }.second
 }
 
 /**
