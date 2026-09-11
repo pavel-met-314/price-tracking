@@ -17,7 +17,14 @@ class ProductEditingTest {
     private fun product(
         url: String = "https://allureparfum.ru/katalog/creed/aventus.html",
         title: String = "Creed - Aventus",
-    ) = TrackedProduct(id = 1L, url = url, title = title, lastPrice = 100.0)
+    ) = TrackedProduct(
+        id = 1L,
+        url = url,
+        title = title,
+        targetPrice = null,
+        lastPrice = 100.0,
+        lastCheckedAt = 1L,
+    )
 
     private fun draft(
         title: String = "",
