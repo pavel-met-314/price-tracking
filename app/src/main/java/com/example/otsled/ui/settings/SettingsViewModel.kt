@@ -354,5 +354,4 @@ data class BackupUiState(
     val failure: String? = null,
 ) {
     val awaitsConfirmation: Boolean get() = pending != null && plan != null
-
 }

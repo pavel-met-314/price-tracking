@@ -46,7 +46,7 @@ class PriceCheckUseCase(
      * SharedPreferences напрямую: домену достаточно знать правила, а не где они лежат.
      */
     private val alertPolicy: () -> AlertPolicy = { AlertPolicy.DEFAULT },
-) : {
+) {
     private companion object {
         /** Отдельный тег, чтобы «цель достигнута» не затиралась уведомлением об изменении цены. */
         const val TARGET_NOTIFICATION_TAG = "target-price"
