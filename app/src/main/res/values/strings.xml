@@ -69,6 +69,9 @@
     <string name="no_price_yet">Цена ещё не проверялась</string>
     <string name="last_checked">Проверено: %1$s</string>
     <string name="price_history">История цен</string>
+    <string name="price_history_hint">Все объёмы: график выше — про выбранный, список — про всё, что мы видели.</string>
+    <string name="price_history_hidden">Скрыто записей старше: %1$d</string>
+    <string name="history_volume_unknown">объём не указан</string>
     <string name="delete_product">Удалить</string>
     <string name="back">Назад</string>
     <string name="settings_title">Настройки</string>

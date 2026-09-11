@@ -217,11 +217,26 @@ fun ProductDetailScreen(
                     Text(
                         text = stringResource(R.string.price_history),
                         style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
+                        modifier = Modifier.padding(top = 16.dp, bottom = 4.dp),
                     )
+                    Text(
+                        text = stringResource(R.string.price_history_hint),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                    if (overview.listing.hiddenCount > 0) {
+                        // Скрывать старьё молча — значит врать про «вся история».
+                        Text(
+                            text = stringResource(R.string.price_history_hidden, overview.listing.hiddenCount),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 8.dp),
+                        )
+                    }
                 }
             }
-            items(overview.history, key = { it.id }) { entry ->
+            items(overview.listing.rows, key = { it.id }) { entry ->
                 HistoryRow(entry)
             }
         }
@@ -232,9 +247,11 @@ fun ProductDetailScreen(
 private fun HistoryRow(entry: PriceHistoryEntry) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
-            entry.volumeLabel?.let { label ->
-                Text(text = label, style = MaterialTheme.typography.labelMedium)
-            }
+            Text(
+                text = entry.volumeLabel ?: stringResource(R.string.history_volume_unknown),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Text(
                 text = stringResource(R.string.price_rubles, PriceFormatter.formatPrice(entry.price)),
                 style = MaterialTheme.typography.titleSmall,

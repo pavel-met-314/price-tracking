@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.otsled.data.parser.ParseResult
 import com.example.otsled.di.AppContainer
+import com.example.otsled.domain.PriceHistoryListing
 import com.example.otsled.domain.PriceSeries
 import com.example.otsled.domain.buildPriceSeriesFromHistory
 import com.example.otsled.domain.model.PriceHistoryEntry
@@ -16,12 +17,14 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * График и список истории — один и тот же набор записей, чтобы выбранный объём фильтровал
- * оба блока одинаково. Иначе цифры под графиком начинают спорить со списком под ним.
+ * [series] — график по выбранному объёму (ряд из разных объёмов врал бы), [listing] — что показано
+ * в «Истории цен»: все объёмы, а не только выбранный. Раньше оба блока фильтровались одинаково,
+ * и это выглядело как «история есть только у 1 мл»: список обязан быть полным, а объём в нём
+ * подписан в каждой строке.
  */
 data class PriceOverview(
     val series: PriceSeries,
-    val history: List<PriceHistoryEntry>,
+    val listing: PriceHistoryListing.Listing,
 )
 
 data class ProductDetailUiState(
@@ -66,15 +69,19 @@ class ProductDetailViewModel(
     )
 
     val overview = combine(history, selectedVariant) { entries, variantId ->
-        val filtered = if (variantId == null) emptyList() else entries.filter { it.variantId == variantId }
+        val forSelectedVariant = if (variantId == null) emptyList() else entries.filter { it.variantId == variantId }
         PriceOverview(
-            series = if (variantId == null) PriceSeries.EMPTY else buildPriceSeriesFromHistory(filtered, variantId),
-            history = filtered,
+            series = if (variantId == null) {
+                PriceSeries.EMPTY
+            } else {
+                buildPriceSeriesFromHistory(forSelectedVariant, variantId)
+            },
+            listing = PriceHistoryListing.rows(entries),
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = PriceOverview(PriceSeries.EMPTY, emptyList()),
+        initialValue = PriceOverview(PriceSeries.EMPTY, PriceHistoryListing.Listing(emptyList(), 0)),
     )
 
     private val _uiState = MutableStateFlow(ProductDetailUiState())
